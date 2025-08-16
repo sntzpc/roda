@@ -1,0 +1,82 @@
+body { -webkit-font-smoothing: antialiased; }
+.nowrap table, .nowrap .table { white-space: nowrap; }
+.suggest-list { position:absolute; z-index:1000; background:#fff; border:1px solid #dee2e6; width:100%; max-height:220px; overflow:auto; border-radius:.5rem; }
+.suggest-item { padding:.5rem .75rem; cursor:pointer; }
+.suggest-item:hover { background:#f1f3f5; }
+
+.blocker {
+  position: fixed; inset: 0; display:flex; flex-direction:column; justify-content:center; align-items:center;
+  background: rgba(255,255,255,.6); z-index: 1090;
+}
+
+/* Pastikan blocker benar-benar tidak intercept klik saat hidden */
+#blocker.d-none { 
+  display: none !important; 
+  pointer-events: none !important; 
+}
+
+.stat { border-left: 4px solid #0d6efd; }
+.stat-label { font-size:.85rem; color:#6c757d; }
+.stat-value { font-size:1.6rem; font-weight:700; }
+
+.card-veh { transition: transform .05s ease-in; }
+.card-veh:hover { transform: translateY(-2px); }
+.card-veh.yellow { background:#fff8e1; }
+.card-veh.pink { background:#ffe8ef; }
+.card-veh.blue { background:#e8f1ff; }
+.card-veh.gray { background:#f1f3f5; }
+
+.badge-soft { background: #eef6ff; color: #0d6efd; }
+
+#notifBar .alert { box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+
+.navbar .nav-link.active { font-weight: 600; }
+
+@media (max-width: 991.98px) {
+  .navbar .nav-link { padding: .5rem .75rem; }
+}
+
+/* Tombol swap versi mobile (muncul di kanan field "Dari") */
+@media (max-width: 767.98px){
+  #fromWrap { position: relative; }
+  #ordFrom { padding-right: 3rem; } /* beri ruang agar teks tidak ketutup tombol */
+
+  #btnSwapMobile{
+    position: absolute;
+    right: .5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 0;
+    background: #e9f2ff;   /* biru lembut */
+    color: #0d6efd;        /* ikon biru bootstrap */
+    box-shadow: 0 6px 14px rgba(13,110,253,.25);
+  }
+  #btnSwapMobile:active{
+    transform: translateY(-50%) scale(0.97);
+  }
+}
+
+/* ====== Auto-suggest wilayah ====== */
+.suggest-host { position: relative; }
+.suggest-list{
+  position: absolute; left: 0; right: 0; top: 100%;
+  background: #fff; border: 1px solid #e9ecef; border-radius: .375rem;
+  box-shadow: 0 10px 24px rgba(0,0,0,.08);
+  max-height: 220px; overflow: auto;
+  z-index: 2000;          /* di atas tombol/element lain */
+  pointer-events: auto;   /* pastikan menangkap klik/tap */
+}
+.suggest-list.d-none { display: none !important; }
+.suggest-item{ padding: .45rem .75rem; cursor: pointer; }
+.suggest-item:hover{ background: #e9f2ff; }
+
+#tblApprovals th:first-child,
+#tblApprovals td:first-child { width:56px; text-align:center; }
+
+#tblCashierTasks td:first-child, #tblCashierTasks th:first-child { width:56px; text-align:center; }
+#tblCashierTasks td { vertical-align: middle; }
+
+

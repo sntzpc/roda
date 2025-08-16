@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Armada Manager – Seriang</title>
+
+  <!-- Bootstrap CSS & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="assets/app.css">
+
+  <!-- XLSX & jsPDF -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-light">
+
+  <!-- Notif bar (hijau/merah lembut) -->
+  <div id="notifBar" class="position-fixed top-0 start-50 translate-middle-x mt-2" style="z-index:1080; width:min(640px, 92vw)"></div>
+
+  <!-- Global blocker -->
+  <div id="blocker" class="blocker d-none">
+    <div class="spinner-border" role="status" aria-label="Loading"></div>
+    <div class="mt-2 small text-muted">Memproses…</div>
+  </div>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+    <div class="container-fluid">
+      <a class="navbar-brand d-flex align-items-center" href="#" data-route="dashboard">
+        <i class="bi bi-truck-front me-2"></i> Armada Seriang
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div id="navMain" class="collapse navbar-collapse">
+        <ul id="navMenu" class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item role-admin role-master"><a class="nav-link" href="#" data-route="dashboard">Dashboard</a></li>
+            <li class="nav-item role-user role-admin role-master"><a class="nav-link" href="#" data-route="order">Order</a></li>
+            <li class="nav-item role-user role-admin role-master"><a class="nav-link" href="#" data-route="vehicles">Kendaraan</a></li>
+            <li class="nav-item role-admin role-master"><a class="nav-link" href="#" data-route="approvals">Persetujuan</a></li>
+            <li class="nav-item role-driver role-admin role-master"><a class="nav-link" href="#" data-route="driver">Driver</a></li>
+            <li class="nav-item role-cashier role-admin role-master"><a class="nav-link" href="#" data-route="cashier">Kasir</a></li>
+            <li class="nav-item role-admin role-master"><a class="nav-link" href="#" data-route="journal">Jurnal</a></li>
+            <li class="nav-item role-user role-admin role-master"><a class="nav-link" href="#" data-route="settings">Pengaturan</a></li>
+        </ul>
+        <div class="d-flex align-items-center gap-3">
+          <span id="whoAmI" class="text-muted small"></span>
+          <button id="btnLogout" class="btn btn-outline-secondary btn-sm">Logout</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Container -->
+  <main class="container py-3">
+
+    <!-- Login Page -->
+    <section data-page="login" class="d-none">
+      <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title mb-3">Login</h5>
+              <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input id="loginUser" class="form-control" autocomplete="username" autofocus>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input id="loginPass" type="password" class="form-control" autocomplete="current-password">
+              </div>
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="rememberMe">
+                <label class="form-check-label" for="rememberMe">Ingat saya 30 hari</label>
+              </div>
+              <div class="d-grid">
+                <button id="btnLogin" class="btn btn-primary">Masuk</button>
+              </div>
+              <div class="form-text mt-3">
+                User Default: <code>admin/admin</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dashboard -->
+    <section data-page="dashboard" class="d-none">
+      <div class="row g-3">
+        <div class="col-6 col-lg-3">
+          <div class="card stat">
+            <div class="card-body">
+              <div class="stat-label">Kendaraan Aktif</div>
+              <div id="statActiveVehicles" class="stat-value">0</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="card stat">
+            <div class="card-body">
+              <div class="stat-label">Tamu Sedang Perjalanan</div>
+              <div id="statOnTrip" class="stat-value">0</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="card">
+            <div class="card-body">
+              <h6 class="card-title mb-3">Top 3 Kendaraan Tersibuk</h6>
+              <ol id="topVehicles" class="mb-0"></ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h6 class="mt-4">Kartu Kendaraan (live)</h6>
+      <div id="dashVehicleCards" class="row g-3"></div>
+    </section>
+
+    <!-- Order -->
+    <section data-page="order" class="d-none">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Order Kendaraan</h5>
+
+          <!-- Identitas (tersimpan di localStorage) -->
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Nama Pemesan</label>
+              <input id="ordNama" class="form-control" autocomplete="name">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Unit</label>
+              <input id="ordUnit" class="form-control">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Jabatan</label>
+              <input id="ordJabatan" class="form-control">
+            </div>
+          </div>
+
+          <hr>
+
+          <!-- Wilayah (auto-suggest + swap) -->
+          <div class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label">Dari</label>
+                <div class="suggest-host" id="fromWrap">
+                <!-- wrapper relatif agar tombol bisa diposisikan absolute -->
+                <div class="position-relative" id="fromWrap">
+                    <input id="ordFrom" class="form-control suggest-input" placeholder="Ketik wilayah…"
+                    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    <div class="suggest-list d-none" id="suggestFrom"></div>
+                    <!-- tombol swap versi mobile -->
+                    <button id="btnSwapMobile" class="d-md-none" type="button" title="Tukar asal/tujuan">
+                    <i class="bi bi-arrow-down-up"></i></button>
+                </div>
+                </div>
+            </div>
+            <div class="col-md-2 text-center d-none d-md-block">
+                <button id="btnSwap" class="btn btn-outline-secondary mt-4" title="Tukar asal/tujuan">
+                <i class="bi bi-arrow-down-up"></i></button>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Ke</label>
+              <div class="suggest-host" id="toWrap">
+              <input id="ordTo" class="form-control suggest-input" placeholder="Ketik wilayah…"
+              autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <div class="suggest-list d-none" id="suggestTo"></div>
+              </div>
+            </div>
+          </div>
+          <div class="form-text">
+            Wilayah akan tersimpan otomatis
+          </div>
+
+          <hr>
+
+          <!-- Waktu Berangkat & Pulang (toggle) -->
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Tanggal & Jam Berangkat</label>
+              <div class="input-group">
+                <input id="ordBerangkatLabel" class="form-control" placeholder="Klik untuk pilih" readonly>
+                <button id="btnPickBerangkat" class="btn btn-outline-secondary"><i class="bi bi-calendar-event"></i></button>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check form-switch mt-4">
+                <input class="form-check-input" type="checkbox" id="tglPulangToggle">
+                <label class="form-check-label" for="tglPulangToggle">Pulang pergi?</label>
+              </div>
+              <div id="pulangWrap" class="mt-2 d-none">
+                <label class="form-label">Tanggal & Jam Pulang</label>
+                <div class="input-group">
+                  <input id="ordPulangLabel" class="form-control" placeholder="Klik untuk pilih" readonly>
+                  <button id="btnPickPulang" class="btn btn-outline-secondary"><i class="bi bi-calendar-event"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr>
+
+          <!-- Jumlah tamu & detail -->
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Jumlah Tamu</label>
+              <select id="ordJmlTamu" class="form-select">
+                <option value="1">1</option><option value="2">2</option>
+                <option value="3">3</option><option value="4">4</option>
+                <option value="5">5</option><option value="6">6</option>
+                <option value="7">7</option><option value="8">8</option>
+                <option value="9">9</option><option value="10">10</option>
+              </select>
+            </div>
+            <div class="col-md-8 d-flex align-items-end">
+              <button id="btnDlGuestTpl" class="btn btn-outline-primary me-2"><i class="bi bi-download"></i> Template</button>
+              <label class="btn btn-outline-success">
+                <i class="bi bi-upload"></i> Upload
+                <input id="upGuests" type="file" accept=".xlsx" hidden>
+              </label>
+              <div class="form-text ms-2">Maks 200 tamu.</div>
+            </div>
+          </div>
+
+          <div id="guestList" class="mt-3"></div>
+
+          <div class="mt-3">
+            <label class="form-label">Agenda / Keperluan</label>
+            <textarea id="ordAgenda" rows="3" class="form-control" placeholder="Tuliskan keperluan tamu…"></textarea>
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button id="btnSubmitOrder" class="btn btn-primary">Kirim Order</button>
+            <button id="btnResetOrder" class="btn btn-outline-secondary">Reset</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Kendaraan -->
+    <section data-page="vehicles" class="d-none">
+      <div class="row" id="vehicleCards"></div>
+    </section>
+
+    <!-- Persetujuan -->
+    <section data-page="approvals" class="d-none">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title d-flex justify-content-between align-items-center">
+            Persetujuan Order
+            <button id="btnReloadApprovals" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Refresh</button>
+          </h5>
+          <div class="table-responsive nowrap">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:56px; text-align:center">No</th><th>Pemesan</th><th>Asal → Tujuan</th><th>Waktu</th><th>Jml</th><th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblApprovals"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal detail tamu & alokasi -->
+      <div class="modal fade" id="mdlAlloc" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h6 class="modal-title">Alokasi Kendaraan & Driver</h6>
+              <button class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                  <div id="allocOrderInfo" class="small text-muted"></div>
+                </div>
+                <button id="btnApproveAll" class="btn btn-success btn-sm" disabled><i class="bi bi-check2-circle"></i> Approve All</button>
+              </div>
+              <div class="table-responsive nowrap">
+                <table class="table table-sm align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>No</th><th>Nama</th><th>Unit</th><th>Jabatan</th>
+                      <th>Kendaraan</th><th>Driver</th><th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tblAllocGuests"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Tutup</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal alasan reject/hapus -->
+      <div class="modal fade" id="mdlReason" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header"><h6 class="modal-title">Alasan</h6>
+              <button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+              <textarea id="reasonText" class="form-control" rows="3" placeholder="Tuliskan alasan…"></textarea>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+              <button id="btnReasonOk" class="btn btn-danger">OK</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Driver -->
+    <section data-page="driver" class="d-none">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title d-flex justify-content-between align-items-center">
+            Tugas Saya
+            <button id="btnReloadDriver" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Refresh</button>
+          </h5>
+          <div class="table-responsive nowrap">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Pemesan</th><th>Jumlah Tamu</th><th>Asal → Tujuan</th><th>Renc. Berangkat</th><th>Lihat</th><th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tblDriver"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Kasir -->
+<section data-page="cashier" class="d-none">
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title d-flex justify-content-between align-items-center">
+        Tugas Kasir
+        <button id="btnReloadCashier" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-repeat"></i> Refresh
+        </button>
+      </h5>
+      <div class="table-responsive nowrap">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>No</th><th>Driver</th><th>Kendaraan</th><th>Rute & Jadwal</th><th>Tamu</th><th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tblCashier"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Surat Tugas / Uang Muka -->
+  <div class="modal fade" id="mdlLetter" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h6 class="modal-title">Buat Surat Tugas & Uang Muka</h6>
+          <button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" id="ltOrderId"><input type="hidden" id="ltDriverId"><input type="hidden" id="ltVehicleId">
+          <div class="mb-2">
+            <label class="form-label">No. Surat Tugas</label>
+            <input id="ltNo" class="form-control" placeholder="ST/001/08/2025">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Uang Muka (Rp)</label>
+            <input id="ltAdvance" type="number" class="form-control" min="0" step="10000" value="0">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Catatan</label>
+            <textarea id="ltNote" class="form-control" rows="2" placeholder="Keperluan..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button id="btnLetterSave" class="btn btn-primary">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Modal PTJB -->
+<div class="modal fade" id="mdlSettle" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Pertanggungjawaban (PTJB)</h6>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label">No. Surat</label>
+          <input id="stLetterNo" class="form-control" readonly>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Uang Muka (Rp)</label>
+          <input id="stAdvance" type="number" class="form-control" readonly>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Pertanggungjawaban (Rp)</label>
+          <input id="stAmount" type="number" class="form-control" min="0" step="10000" value="0">
+          <div class="form-text" id="stDiff">Selisih: 0</div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Status</label>
+          <select id="stStatus" class="form-select">
+            <option value="lunas">Lunas (selesai)</option>
+            <option value="pending">Belum (pending)</option>
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Catatan</label>
+          <textarea id="stNote" class="form-control" rows="2" placeholder="Keterangan PTJB"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Tutup</button>
+        <button id="btnSettleSave" class="btn btn-warning">Simpan PTJB</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <!-- Jurnal -->
+    <section data-page="journal" class="d-none">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Jurnal</h5>
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Dari (tgl)</label>
+              <input id="jrFrom" type="date" class="form-control">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Sampai (tgl)</label>
+              <input id="jrTo" type="date" class="form-control">
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-2">
+              <button id="btnShowJournal" class="btn btn-primary">Tampilkan</button>
+              <button id="btnXlsx" class="btn btn-outline-success"><i class="bi bi-file-earmark-excel"></i> Export Excel</button>
+              <button id="btnPdf" class="btn btn-outline-danger"><i class="bi bi-filetype-pdf"></i> Export PDF</button>
+            </div>
+          </div>
+          <div class="table-responsive nowrap mt-3">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>No.</th><th>Nama</th><th>Unit</th><th>Jabatan</th><th>Agenda</th><th>Kendaraan</th><th>Driver</th>
+                  <th>Tgl Berangkat</th><th>Jam Berangkat</th><th>Tgl Tiba</th><th>Jam Tiba</th>
+                </tr>
+              </thead>
+              <tbody id="tblJournal"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pengaturan -->
+    <section data-page="settings" class="d-none">
+      <ul class="nav nav-pills mb-3" id="pills">
+        <li class="nav-item"><button class="nav-link active" data-stab="identitas">Identitas</button></li>
+        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="vehicles">Kendaraan</button></li>
+        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="drivers">Driver</button></li>
+        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="users">Kelola User</button></li>
+        <li class="nav-item role-master"><button class="nav-link" data-stab="config">Config</button></li>
+      </ul>
+
+      <div id="stab-identitas" class="stab card p-3">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Nama</label>
+            <input id="setNama" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Unit</label>
+            <input id="setUnit" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Jabatan</label>
+            <input id="setJabatan" class="form-control">
+          </div>
+        </div>
+        <div class="mt-3">
+          <button id="btnSaveIdent" class="btn btn-primary">Simpan</button>
+        </div>
+      </div>
+
+      <div id="stab-vehicles" class="stab card p-3 d-none">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6>Manajemen Kendaraan</h6>
+          <button id="btnAddVeh" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
+        </div>
+        <div class="table-responsive nowrap mt-2">
+          <table class="table table-sm">
+            <thead class="table-light"><tr>
+              <th>Nama</th><th>Merk</th><th>NoPol</th><th>Kapasitas</th><th>Driver</th><th>Status</th><th>Keterangan</th><th>Aksi</th>
+            </tr></thead>
+            <tbody id="tblSetVehicles"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="stab-drivers" class="stab card p-3 d-none">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6>Manajemen Driver</h6>
+          <button id="btnAddDrv" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
+        </div>
+        <div class="table-responsive nowrap mt-2">
+          <table class="table table-sm">
+            <thead class="table-light"><tr>
+              <th>Nama</th><th>No WA</th><th>Status</th><th>userId</th><th>Aksi</th>
+            </tr></thead>
+            <tbody id="tblSetDrivers"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="stab-users" class="stab card p-3 d-none">
+        <div class="d-flex justify-content-between align-items-center">
+          <h6>Kelola User</h6>
+          <button id="btnAddUser" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
+        </div>
+        <div class="table-responsive nowrap mt-2">
+          <table class="table table-sm">
+            <thead class="table-light"><tr>
+              <th>Username</th><th>Role</th><th>Telegram ID</th><th>Change Pass</th><th>Aksi</th>
+            </tr></thead>
+            <tbody id="tblSetUsers"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="stab-config" class="stab card p-3 d-none">
+        <h6>Config (Master)</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Telegram Bot Token</label>
+            <input id="cfgTgBot" class="form-control" placeholder="123456:ABC...">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Telegram Admin Chat ID</label>
+            <input id="cfgTgAdmin" class="form-control" placeholder="123456789">
+          </div>
+        </div>
+        <div class="mt-3 d-flex gap-2">
+          <button id="btnSaveConfig" class="btn btn-primary">Simpan Config</button>
+          <button id="btnRefreshConfig" class="btn btn-outline-secondary">Reload</button>
+        </div>
+        <hr>
+        <div class="alert alert-info small">
+          Password disimpan dalam hash. Untuk setel ulang password, ubah via tabel user. (Demi keamanan, plaintext <em>tidak</em> disimpan.)
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal DateTime Picker -->
+  <div class="modal fade" id="mdlDateTime" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h6 class="modal-title">Pilih Tanggal & Jam</h6>
+          <button class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label">Tanggal</label>
+              <input type="date" id="dtDate" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Jam (24h)</label>
+              <input type="time" id="dtTime" class="form-control" step="60">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button id="btnDtOk" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- App scripts (module order matters) -->
+  <script type="module" src="js/util.js"></script>
+  <script type="module" src="js/notif.js"></script>
+  <script type="module" src="js/store.js"></script>
+  <script type="module" src="js/api.js"></script>
+  <script type="module" src="js/auth.js"></script>
+  <script type="module" src="js/ui.js"></script>
+  <script type="module" src="js/order.js"></script>
+  <script type="module" src="js/vehicles.js"></script>
+  <script type="module" src="js/approvals.js"></script>
+  <script type="module" src="js/driver.js"></script>
+  <script type="module" src="js/cashier.js"></script>
+  <script type="module" src="js/journal.js"></script>
+  <script type="module" src="js/settings.js"></script>
+  <script type="module" src="js/dashboard.js"></script>
+
+  <style>
+  /* opsional: sembunyikan dulu semua nav-item, nanti gate() menampilkan yang berhak */
+  #navMenu .nav-item { display: none; }
+  body.gated #navMenu .nav-item { display: list-item; }
+</style>
+<script>
+  // setelah DOM siap dan gate() pertama kali jalan, tambahkan class agar nav muncul
+  window.addEventListener('route', ()=> document.body.classList.add('gated'), { once:true });
+</script>
+
+<!-- Modal: Detail Tamu Driver -->
+<div class="modal fade" id="mdlDriverGuests" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          Detail Tamu • <span id="dgOrderId"></span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="small text-muted mb-2" id="dgOrderInfo"></div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:56px">No</th>
+                <th>Nama Tamu</th>
+                <th>Unit</th>
+                <th>Jabatan</th>
+                <th>Gender</th>
+                <th>No WA</th>
+                <th class="text-center" style="width:90px">Check</th>
+                <th style="min-width:220px;">Keterangan</th>
+              </tr>
+            </thead>
+            <tbody id="tblGuestDetail"></tbody>
+          </table>
+        </div>
+        <div class="form-text">
+          • Centang tamu yang ikut berangkat.<br>
+          • Jika ada tamu yang <strong>tidak ikut</strong>, wajib isi <em>Keterangan</em> di baris tamu tersebut.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Tutup</button>
+        <button id="btnSaveChecklist" class="btn btn-primary">Simpan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
