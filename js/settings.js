@@ -294,3 +294,8 @@ q('#btnSaveConfig')?.addEventListener('click', async ()=>{
   showNotif('success','Config disimpan');
 });
 q('#btnRefreshConfig')?.addEventListener('click', loadConfig);
+
+document.querySelectorAll('.table-wrap[data-hint="1"]').forEach(w=>{
+  const once = ()=>{ w.removeAttribute('data-hint'); w.removeEventListener('scroll', once); };
+  w.addEventListener('scroll', once, {passive:true});
+});

@@ -154,7 +154,7 @@
                 <div class="suggest-host" id="fromWrap">
                 <!-- wrapper relatif agar tombol bisa diposisikan absolute -->
                 <div class="position-relative" id="fromWrap">
-                    <input id="ordFrom" class="form-control suggest-input" placeholder="Ketik wilayah…"
+                    <input id="ordFrom" class="form-control suggest-input" placeholder="Ketik Asal…"
                     autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                     <div class="suggest-list d-none" id="suggestFrom"></div>
                     <!-- tombol swap versi mobile -->
@@ -170,7 +170,7 @@
             <div class="col-md-5">
               <label class="form-label">Ke</label>
               <div class="suggest-host" id="toWrap">
-              <input id="ordTo" class="form-control suggest-input" placeholder="Ketik wilayah…"
+              <input id="ordTo" class="form-control suggest-input" placeholder="Ketik Tujuan…"
               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
               <div class="suggest-list d-none" id="suggestTo"></div>
               </div>
@@ -258,8 +258,8 @@
             Persetujuan Order
             <button id="btnReloadApprovals" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Refresh</button>
           </h5>
-          <div class="table-responsive nowrap">
-            <table class="table table-sm align-middle">
+          <div class="table-wrap table-responsive nowrap" data-hint="1">
+            <table class="table table-sm align-middle table-sticky-first">
               <thead class="table-light">
                 <tr>
                   <th style="width:56px; text-align:center">No</th><th>Pemesan</th><th>Asal → Tujuan</th><th>Waktu</th><th>Jml</th><th>Aksi</th>
@@ -286,8 +286,8 @@
                 </div>
                 <button id="btnApproveAll" class="btn btn-success btn-sm" disabled><i class="bi bi-check2-circle"></i> Approve All</button>
               </div>
-              <div class="table-responsive nowrap">
-                <table class="table table-sm align-middle">
+              <div class="table-wrap table-responsive nowrap" data-hint="1">
+                <table class="table table-sm align-middle table-sticky-first">
                   <thead class="table-light">
                     <tr>
                       <th>No</th><th>Nama</th><th>Unit</th><th>Jabatan</th>
@@ -331,8 +331,8 @@
             Tugas Saya
             <button id="btnReloadDriver" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Refresh</button>
           </h5>
-          <div class="table-responsive nowrap">
-            <table class="table table-sm align-middle">
+          <div class="table-wrap table-responsive nowrap" data-hint="1">
+            <table class="table table-sm align-middle table-sticky-first">
               <thead class="table-light">
                 <tr>
                   <th>Pemesan</th><th>Jumlah Tamu</th><th>Asal → Tujuan</th><th>Renc. Berangkat</th><th>Lihat</th><th>Aksi</th>
@@ -355,8 +355,8 @@
           <i class="bi bi-arrow-repeat"></i> Refresh
         </button>
       </h5>
-      <div class="table-responsive nowrap">
-        <table class="table table-sm align-middle">
+      <div class="table-wrap table-responsive nowrap" data-hint="1">
+        <table class="table table-sm align-middle table-sticky-first">
           <thead class="table-light">
             <tr>
               <th>No</th><th>Driver</th><th>Kendaraan</th><th>Rute & Jadwal</th><th>Tamu</th><th>Aksi</th>
@@ -461,7 +461,7 @@
             </div>
           </div>
           <div class="table-responsive nowrap mt-3">
-            <table class="table table-sm align-middle">
+            <table class="table table-sm align-middle table-sticky-first">
               <thead class="table-light">
                 <tr>
                   <th>No.</th><th>Nama</th><th>Unit</th><th>Jabatan</th><th>Agenda</th><th>Kendaraan</th><th>Driver</th>
@@ -510,8 +510,8 @@
           <h6>Manajemen Kendaraan</h6>
           <button id="btnAddVeh" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
         </div>
-        <div class="table-responsive nowrap mt-2">
-          <table class="table table-sm">
+        <div class="table-wrap table-wrap--veh table-responsive nowrap" data-hint="1">
+          <table class="table table-sm align-middle table-sticky-first table-sticky-last">
             <thead class="table-light"><tr>
               <th>Nama</th><th>Merk</th><th>NoPol</th><th>Kapasitas</th><th>Driver</th><th>Status</th><th>Keterangan</th><th>Aksi</th>
             </tr></thead>
@@ -525,8 +525,8 @@
           <h6>Manajemen Driver</h6>
           <button id="btnAddDrv" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
         </div>
-        <div class="table-responsive nowrap mt-2">
-          <table class="table table-sm">
+        <div class="table-wrap table-wrap--veh table-responsive nowrap" data-hint="1">
+          <table class="table table-sm align-middle table-sticky-first table-sticky-last">
             <thead class="table-light"><tr>
               <th>Nama</th><th>No WA</th><th>Status</th><th>userId</th><th>Aksi</th>
             </tr></thead>
@@ -540,8 +540,8 @@
           <h6>Kelola User</h6>
           <button id="btnAddUser" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
         </div>
-        <div class="table-responsive nowrap mt-2">
-          <table class="table table-sm">
+        <div class="table-wrap table-wrap--veh table-responsive nowrap" data-hint="1">
+          <table class="table table-sm align-middle table-sticky-first table-sticky-last">
             <thead class="table-light"><tr>
               <th>Username</th><th>Role</th><th>Telegram ID</th><th>Change Pass</th><th>Aksi</th>
             </tr></thead>
@@ -643,7 +643,7 @@
       <div class="modal-body">
         <div class="small text-muted mb-2" id="dgOrderInfo"></div>
         <div class="table-responsive">
-          <table class="table table-sm align-middle">
+          <table class="table table-sm align-middle table-sticky-first">
             <thead class="table-light">
               <tr>
                 <th style="width:56px">No</th>

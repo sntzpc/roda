@@ -79,4 +79,52 @@ body { -webkit-font-smoothing: antialiased; }
 #tblCashierTasks td:first-child, #tblCashierTasks th:first-child { width:56px; text-align:center; }
 #tblCashierTasks td { vertical-align: middle; }
 
+/* ====== Scrollable table for mobile ====== */
+.table-wrap{
+  display:block;
+  max-width:100%;
+  overflow-x:auto;                   /* horizontal scroll */
+  -webkit-overflow-scrolling:touch;  /* momentum scroll iOS */
+  overscroll-behavior-inline:contain;
+}
+
+/* Biarkan konten tabel menentukan lebar, jadi bisa di-scroll */
+.table-wrap > table{
+  width:max-content;   /* penting: jangan 100% */
+  min-width:640px;     /* baseline minimum supaya ada ruang scroll */
+  border-collapse:separate;
+  border-spacing:0;
+}
+
+/* Lebarkan sedikit saat layar kecil supaya benar-benar perlu scroll */
+@media (max-width: 576px){
+  .table-wrap > table{ min-width: 780px; }
+}
+
+/* Jangan patah baris di sel */
+.nowrap th,
+.nowrap td{ white-space:nowrap; }
+
+/* Sticky kolom pertama (mis: No) biar referensi tetap kelihatan saat di-scroll */
+.table-sticky-first th:first-child,
+.table-sticky-first td:first-child{
+  position:sticky;
+  left:0;
+  z-index:1;
+  background:var(--bs-body-bg, #fff); /* pakai warna background saat ini */
+  box-shadow: 1px 0 0 rgba(0,0,0,.05);
+}
+
+/* Scroll hint (opsional) */
+.table-wrap[data-hint="1"]{
+  position:relative;
+}
+.table-wrap[data-hint="1"]::after{
+  content:"↔ geser";
+  position:absolute;
+  right:.5rem; bottom:.35rem;
+  font-size:.75rem; color:#6c757d;
+  background:rgba(255,255,255,.85);
+  padding:.1rem .35rem; border-radius:.25rem;
+}
 
