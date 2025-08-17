@@ -57,6 +57,7 @@ function Utilities_b64encode(str) {
 }
 
 // --- POST dengan fallback JSONP, no-block untuk 'ping' & 'login'
+// --- POST dengan fallback JSONP
 async function post(action, payload = {}) {
   const token = (JSON.parse(localStorage.getItem('roda_token') || '{}').token) || '';
   const body  = { action, ...payload, token };
@@ -74,18 +75,19 @@ async function post(action, payload = {}) {
     return j.data;
   };
 
-  // ping & login: JANGAN buka blocker
+  // ⬇️ TANPA overlay untuk ping & login
   if (action === 'ping' || action === 'login') {
     try { return await runFetch(); }
     catch { return await jsonpCall(action, payload); }
   }
 
-  // aksi lain: blocker ON, dan ada fallback JSONP bila fetch gagal
+  // Aksi lain → pakai overlay blocker
   return await block.wrap(async ()=>{
     try { return await runFetch(); }
     catch { return await jsonpCall(action, payload); }
   });
 }
+
 
 
 

@@ -478,13 +478,12 @@
     <!-- Pengaturan -->
     <section data-page="settings" class="d-none">
       <ul class="nav nav-pills mb-3" id="pills">
-        <li class="nav-item"><button class="nav-link active" data-stab="identitas">Identitas</button></li>
-        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="vehicles">Kendaraan</button></li>
+        <li class="nav-item"><button class="nav-link active" data-stab="identitas">Pemesan</button></li>
+        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="vehicles">Armada</button></li>
         <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="drivers">Driver</button></li>
-        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="users">Kelola User</button></li>
+        <li class="nav-item role-admin role-master"><button class="nav-link" data-stab="users">User</button></li>
         <li class="nav-item role-master"><button class="nav-link" data-stab="config">Config</button></li>
       </ul>
-
       <div id="stab-identitas" class="stab card p-3">
         <div class="row g-3">
           <div class="col-md-4">
@@ -511,7 +510,7 @@
           <button id="btnAddVeh" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
         </div>
         <div class="table-wrap table-wrap--veh table-responsive nowrap" data-hint="1">
-          <table class="table table-sm align-middle table-sticky-first table-sticky-last">
+          <table class="table table-sm align-middle table-sticky-first">
             <thead class="table-light"><tr>
               <th>Nama</th><th>Merk</th><th>NoPol</th><th>Kapasitas</th><th>Driver</th><th>Status</th><th>Keterangan</th><th>Aksi</th>
             </tr></thead>
@@ -526,7 +525,7 @@
           <button id="btnAddDrv" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
         </div>
         <div class="table-wrap table-wrap--veh table-responsive nowrap" data-hint="1">
-          <table class="table table-sm align-middle table-sticky-first table-sticky-last">
+          <table class="table table-sm align-middle table-sticky-first">
             <thead class="table-light"><tr>
               <th>Nama</th><th>No WA</th><th>Status</th><th>userId</th><th>Aksi</th>
             </tr></thead>
@@ -541,7 +540,7 @@
           <button id="btnAddUser" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tambah</button>
         </div>
         <div class="table-wrap table-wrap--veh table-responsive nowrap" data-hint="1">
-          <table class="table table-sm align-middle table-sticky-first table-sticky-last">
+          <table class="table table-sm align-middle table-sticky-first">
             <thead class="table-light"><tr>
               <th>Username</th><th>Role</th><th>Telegram ID</th><th>Change Pass</th><th>Aksi</th>
             </tr></thead>

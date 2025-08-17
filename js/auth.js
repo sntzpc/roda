@@ -5,6 +5,31 @@ import { api } from './api.js';
 import { saveToken, loadToken, clearToken } from './store.js';
 import { showPage, setGuard } from './ui.js';
 
+let isLogging = false;
+
+function setBtnLoading(btn, on, labelBusy = 'Masuk…') {
+  if (!btn) return;
+  if (on) {
+    // kunci lebar agar tidak “loncat”
+    btn.dataset._prevHtml = btn.innerHTML;
+    btn.style.width = btn.offsetWidth + 'px';
+    btn.disabled = true;
+    btn.innerHTML = `
+      <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+      ${labelBusy}`;
+  } else {
+    btn.innerHTML = btn.dataset._prevHtml || 'Masuk';
+    btn.style.width = '';
+    btn.disabled = false;
+  }
+}
+
+function toggleLoginForm(disabled){
+  q('#loginUser')?.toggleAttribute('disabled', disabled);
+  q('#loginPass')?.toggleAttribute('disabled', disabled);
+  q('#rememberMe')?.toggleAttribute('disabled', disabled);
+}
+
 /* =========================
    Aturan halaman per role
    ========================= */
@@ -82,11 +107,18 @@ async function tryAuto(){
    Login / Logout
    ========================= */
 async function onLogin(){
+  if (isLogging) return;            // cegah double click / double enter
+  isLogging = true;
+
   const u = q('#loginUser').value.trim();
   const p = q('#loginPass').value;
   const remember = q('#rememberMe').checked;
+  const btnLogin = q('#btnLogin');
 
   try{
+    setBtnLoading(btnLogin, true);
+    toggleLoginForm(true);
+
     const data = await api.login(u,p,remember);
     auth = { user:data.user, token:data.token };
     saveToken({token:data.token});
@@ -96,8 +128,13 @@ async function onLogin(){
     showPage(defaultPageFor(auth.user.role));
   }catch(e){
     showNotif('error', e.message || 'Login gagal');
+  }finally{
+    setBtnLoading(btnLogin, false);
+    toggleLoginForm(false);
+    isLogging = false;
   }
 }
+
 
 function logout(){
   clearToken();
