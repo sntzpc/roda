@@ -2,17 +2,9 @@
 import { q } from './util.js';
 import { showNotif } from './notif.js';
 import { api } from './api.js';
+import { isDbg, prefixed } from './debug.js';
+const dlog = prefixed('[CCTV]');
 
-/* ====== (opsional) CCTV toggle ====== */
-const DBG_KEY = 'roda_debug';
-function isDbg(){ try{ return JSON.parse(localStorage.getItem(DBG_KEY)||'false'); }catch(_){ return false; } }
-function dlog(...args){ if(isDbg()) console.log('[CCTV]', ...args); }
-window.addEventListener('keydown', (e)=>{
-  if (e.ctrlKey && e.shiftKey && (e.key==='D' || e.key==='d')) {
-    const v = !isDbg(); localStorage.setItem(DBG_KEY, JSON.stringify(v));
-    showNotif('success', `Debug ${v?'ON':'OFF'}`);
-  }
-});
 
 /* ====== state ====== */
 let currentOrderId = null;

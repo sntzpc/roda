@@ -12,27 +12,39 @@ function statusClass(s){
 }
 function statusText(s){
   return ({
-    available:'Tersedia',
-    allocated:'Teralokasi',
-    on_trip:'Dalam Perjalanan',
-    maintenance:'Perbaikan',
-    inactive:'Non-Aktif'
+    available:   'Tersedia',
+    allocated:   'Teralokasi',
+    on_trip:     'Dalam Perjalanan',
+    maintenance: 'Perbaikan',
+    inactive:    'Non-Aktif'
   })[s] || s;
 }
+
+// === mapping kelas badge kecil di pojok kanan card ===
+function statusBadgeClass(s){
+  if (s === 'available')   return 'badge-status bg-available';
+  if (s === 'allocated')   return 'badge-status bg-allocated';
+  if (s === 'on_trip')     return 'badge-status bg-ontrip';
+  if (s === 'maintenance') return 'badge-status bg-maintenance';
+  if (s === 'inactive')    return 'badge-status bg-inactive';
+  return 'badge-status bg-inactive';
+}
+
 async function load(){
   const list = await api.listVehicles();
   q('#vehicleCards').innerHTML = list.map(v=>{
     const cls = statusClass(v.status);
-    const canOrder = v.status==='available';
-    const reason = v.note? `<div class="small text-muted mt-1">${v.note}</div>`:'';
+    const badgeCls = statusBadgeClass(v.status);
+    const canOrder = v.status === 'available';
+    const reason = v.note ? `<div class="small text-muted mt-1">${v.note}</div>` : '';
     return `<div class="col-12 col-md-6 col-lg-4">
       <div class="card card-veh ${cls}">
         <div class="card-body">
           <div class="d-flex justify-content-between">
             <h6 class="mb-1">${v.name}</h6>
-            <span class="badge bg-secondary">${statusText(v.status)}</span>
+            <span class="badge ${badgeCls}">${statusText(v.status)}</span>
           </div>
-          <div class="small text-muted">${v.brand} • ${v.plate} • Kap ${v.capacity}</div>
+          <div class="small text-muted">${v.brand||'-'} • ${v.plate||'-'} • Kap ${v.capacity||'-'}</div>
           <div class="mt-2">Driver: <strong>${v.driverName||'-'}</strong> <span class="text-muted">(${v.driverWa||'-'})</span></div>
           ${reason}
           <div class="mt-3">
@@ -42,6 +54,7 @@ async function load(){
       </div>
     </div>`;
   }).join('');
+
   q('#vehicleCards').querySelectorAll('[data-order]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       cachePreselectVehicle(btn.dataset.order);
@@ -50,4 +63,6 @@ async function load(){
   });
 }
 
-window.addEventListener('route', e=>{ if(e.detail.page==='vehicles'||e.detail.page==='dashboard') load(); });
+window.addEventListener('route', e=>{
+  if (e.detail.page==='vehicles' || e.detail.page==='dashboard') load();
+});

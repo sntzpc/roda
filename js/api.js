@@ -2,7 +2,7 @@
 import { block } from './notif.js';
 
 // <<< SET: URL Web App GAS kamu >>>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzLd7HMg9JIq2W2XECap5EugR84VIv9_tNQUoRwpsER_fEBveLE3hn65K--JtbFaxA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyQgEvOfwTiAZlBghwtAPYWH_uHz_SaRD_7aprcUcAHmsXZe8UjEGH3b0gQLDeA3LXm/exec';
 
 // Ambil token dari localStorage
 function getToken() {
@@ -114,6 +114,7 @@ export const api = {
   deleteUser: (username)     => post('deleteUser', { username }),
   getConfig: ()              => post('getConfig', {}),
   setConfig: (cfg)           => post('setConfig', { cfg }),
+  testTelegram: (chatId, text) => post('testTelegram', { chatId, text }),
 
   // orders & approvals
   createOrder: (order)                         => post('createOrder', { order }),
@@ -135,6 +136,7 @@ export const api = {
   return post('myTasks', { driverUser: String(val || '').trim() });
 },
   myTasksAll: () => post('myTasksAll', {}),
+  allDriverTasks: () => post('allDriverTasks', {}),
 
   depart:    (orderId, guestNo)                => post('depart', { orderId, guestNo }),
   arrive:    (orderId, guestNo)                => post('arrive', { orderId, guestNo }),

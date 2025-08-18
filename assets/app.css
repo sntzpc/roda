@@ -39,6 +39,41 @@ body.gated #navMenu .nav-item{ display:list-item; }
 .card-veh.blue{ background:#e8f1ff; }
 .card-veh.gray{ background:#f1f3f5; }
 
+/* (opsional) warna badge status mengikuti status */
+.badge-status.bg-available   { background-color:#28a745 !important; }
+.badge-status.bg-allocated   { background-color:#f0ad4e !important; color:#212529 !important; }
+.badge-status.bg-ontrip      { background-color:#dc3545 !important; }
+.badge-status.bg-maintenance { background-color:#6c757d !important; }
+.badge-status.bg-inactive    { background-color:#6c757d !important; }
+
+/* ===== Kartu Kendaraan: warna per-status ===== */
+.card-veh { transition: transform .05s ease-in; }
+.card-veh:hover { transform: translateY(-2px); }
+
+/* Tersedia = Hijau */
+.card-veh.green { 
+  background: #e9f7ef;             /* hijau sangat lembut */
+  border-left: 4px solid #28a745;  /* aksen hijau */
+}
+
+/* Teralokasi = Kuning */
+.card-veh.yellow { 
+  background: #fff8e1; 
+  border-left: 4px solid #f0ad4e;  /* aksen oranye/kuning */
+}
+
+/* Dalam Perjalanan = Merah */
+.card-veh.red { 
+  background: #ffeaea; 
+  border-left: 4px solid #dc3545;  /* aksen merah */
+}
+
+/* Perbaikan & Non-Aktif = Abu-abu */
+.card-veh.gray { 
+  background: #f1f3f5; 
+  border-left: 4px solid #adb5bd;  /* aksen abu */
+}
+
 /*****************************************
  * Auto-suggest wilayah
  *****************************************/
@@ -147,12 +182,62 @@ section[data-page="cashier"] table td{ vertical-align:middle; }
 .table-wrap--veh td:nth-child(5) select.form-select{ min-width:160px; } /* Driver */
 .table-wrap--veh td:nth-child(6) select.form-select{ min-width:150px; } /* Status */
 
-/* Settings > Users: header "Aksi" rata kiri */
-#stab-users .table thead th:last-child { 
-  text-align: left !important; 
+/* ===== Dashboard vehicle cards (modern) ===== */
+.veh-card{
+  cursor:pointer;
+  border:0;
+  border-radius: .75rem;
+  padding: .9rem 1rem;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0,0,0,.06);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.veh-card:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0,0,0,.10);
 }
 
-/* (opsional) kalau sel Aksi juga ikut rata kanan oleh rule lain, paksa kiri */
-#stab-users .table tbody td:last-child { 
-  text-align: left !important; 
+.veh-card .veh-head{
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  margin-bottom:.25rem;
 }
+.veh-card .veh-title{
+  font-weight:600; display:flex; align-items:center; flex-wrap:wrap;
+}
+.veh-card .veh-plate{
+  display:inline-block; font-size:.85rem; padding:.1rem .45rem; margin-left:.5rem;
+  background:#f6f7f9; border-radius:.35rem; color:#555; border:1px solid #eceff3;
+}
+.veh-card .veh-badge{
+  font-size:.75rem; padding:.15rem .5rem; border-radius:.35rem;
+  background:#eef2ff; color:#3450d3; border:1px solid #e3e8ff;
+}
+.veh-card .veh-sub{ margin-bottom:.25rem; }
+.veh-card .veh-meta{ margin-top:.25rem; }
+.veh-card .veh-foot{
+  margin-top:.5rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+}
+
+.veh-card.veh-yellow{ background: #fffdf4; }
+.veh-card.veh-pink{   background: #fff5f7; }
+.veh-card.veh-blue{   background: #f4f8ff; }
+.veh-card.veh-gray{   background: #f7f8fa; }
+
+/* Kartu kendaraan dashboard */
+.veh-card{
+  cursor:pointer; background:#fff; border:1px solid #e9ecef; border-radius:.75rem;
+  padding:.9rem 1rem; box-shadow:0 4px 14px rgba(0,0,0,.06); transition:.12s;
+}
+.veh-card:hover{ transform:translateY(-1px); box-shadow:0 10px 24px rgba(0,0,0,.10); }
+.veh-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:.35rem; }
+.veh-title{ font-weight:600; }
+.veh-badge{ font-size:.75rem; background:#f1f3f5; padding:.2rem .5rem; border-radius:.25rem; }
+.veh-sub{ min-height:1rem; }
+.veh-meta{ margin-top:.35rem; }
+.veh-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:.5rem; }
+.veh-plate{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.85em; margin-left:.25rem; }
+.veh-yellow{ background:#fff8e1; }
+.veh-pink{ background:#ffe8ef; }
+.veh-blue{ background:#e8f1ff; }
+.veh-gray{ background:#f1f3f5; }
+

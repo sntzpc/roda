@@ -209,10 +209,13 @@ async function loadUsers(){
   const tbody = q('#tblSetUsers');
 
   tbody.innerHTML = users.map(u=>{
-    // Admin tidak boleh set 'master'
+    // Role yang bisa dipilih (admin tidak boleh set ke master)
     const ROLES = (auth.user?.role === 'admin')
       ? ['user','driver','cashier','admin']
       : ['user','driver','cashier','admin','master'];
+
+    // Jika role=admin, baris user `master` disembunyikan
+    if (auth.user?.role === 'admin' && u.username === 'master') return '';
 
     const roleOpt = ROLES.map(r =>
       `<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`
@@ -220,42 +223,49 @@ async function loadUsers(){
 
     const isAdmin  = u.username === 'admin';
     const isMaster = u.username === 'master';
-    if (auth.user?.role === 'admin' && isMaster) return ''; // sembunyikan baris master utk admin
 
     return `<tr data-uname="${u.username}">
       <td class="text-monospace">${u.username}</td>
-      <td><select class="form-select form-select-sm" data-f="role">${roleOpt}</select></td>
-      <td><input class="form-control form-control-sm" data-f="tgId" placeholder="Telegram chat ID" value="${u.tgId||''}"></td>
+      <td>
+        <select class="form-select form-select-sm" data-f="role">
+          ${roleOpt}
+        </select>
+      </td>
+      <td>
+        <input class="form-control form-control-sm" data-f="tgId" placeholder="Telegram chat ID" value="${u.tgId||''}">
+      </td>
       <td class="text-nowrap">
-        <input class="form-control form-control-sm d-inline-block w-auto me-2" data-f="newPassword" type="password" placeholder="password baru">
         <button class="btn btn-sm btn-primary" data-act="save">Simpan</button>
         ${(!isAdmin && !isMaster) ? `<button class="btn btn-sm btn-outline-danger ms-1" data-act="del">Hapus</button>` : ''}
+        <button class="btn btn-sm btn-outline-secondary ms-1" data-resetpw>Reset Pass</button>
       </td>
     </tr>`;
-  }).join('');
+  }).filter(Boolean).join('');
 
-  // Save user
+  // Simpan (role/tgId)
   tbody.querySelectorAll('button[data-act="save"]').forEach(btn=>{
-  btn.addEventListener('click', async ()=>{
-    const tr = btn.closest('tr'); const uname = tr.getAttribute('data-uname');
-    const get = s => tr.querySelector(`[data-f="${s}"]`);
-    const role = get('role')?.value;
-    const tgId = get('tgId')?.value || '';
-    const newPassword = get('newPassword')?.value || '';
+    btn.addEventListener('click', async ()=>{
+      const tr = btn.closest('tr');
+      const uname = tr.getAttribute('data-uname');
+      const get = s => tr.querySelector(`[data-f="${s}"]`);
+      const role = get('role')?.value;
+      const tgId = get('tgId')?.value || '';
 
-    try{
-      // ⬇️ KIRIM FLAT OBJ, JANGAN { user:{...} }
-      await api.upsertUser({ username: uname, role, tgId, newPassword });
-      showNotif('success','User tersimpan');
-    }catch(e){
-      showNotif('error', e.message || 'Gagal simpan user');
-    }
+      try{
+        // KIRIM FLAT OBJECT (tanpa nested {user:...})
+        await api.upsertUser({ username: uname, role, tgId });
+        showNotif('success','User tersimpan');
+      }catch(e){
+        showNotif('error', e.message || 'Gagal simpan user');
+      }
+    });
   });
-});
-  // Delete user
+
+  // Hapus user
   tbody.querySelectorAll('button[data-act="del"]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
-      const tr = btn.closest('tr'); const uname = tr.getAttribute('data-uname');
+      const tr = btn.closest('tr');
+      const uname = tr.getAttribute('data-uname');
       if(!confirm(`Hapus user "${uname}"?`)) return;
       try{
         await api.deleteUser(uname);
@@ -263,6 +273,24 @@ async function loadUsers(){
         showNotif('success','User dihapus');
       }catch(e){
         showNotif('error', e.message || 'Gagal hapus user');
+      }
+    });
+  });
+
+  // Reset password via prompt
+  tbody.querySelectorAll('[data-resetpw]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const tr = btn.closest('tr');
+      const uname = tr.getAttribute('data-uname');
+      const pw = prompt(`Password baru untuk ${uname}?`);
+      if (!pw) return;
+      try{
+        // ⬇️ PENTING: hanya kirim username + newPassword
+        // (jangan kirim role/tgId supaya tidak mengubah kolom lain)
+        await api.upsertUser({ username: uname, newPassword: pw });
+        showNotif('success','Password direset');
+      }catch(e){
+        showNotif('error', e.message || 'Gagal reset password');
       }
     });
   });
@@ -298,4 +326,24 @@ q('#btnRefreshConfig')?.addEventListener('click', loadConfig);
 document.querySelectorAll('.table-wrap[data-hint="1"]').forEach(w=>{
   const once = ()=>{ w.removeAttribute('data-hint'); w.removeEventListener('scroll', once); };
   w.addEventListener('scroll', once, {passive:true});
+});
+
+// === Test Telegram ===
+q('#btnTestTelegram')?.addEventListener('click', async ()=>{
+  // ambil chatId dari input uji; jika kosong, backend akan pakai Admin Chat ID di Config
+  const chatId = (q('#tgTestChat')?.value || '').trim();
+  const text   = (q('#tgTestText')?.value || 'Test notifikasi').trim() || 'Test notifikasi';
+
+  const btn = q('#btnTestTelegram');
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Mengirim...';
+
+  try{
+    const res = await api.testTelegram(chatId, text);
+    showNotif('success', `Terkirim ke ${res?.to || '(admin)'}.`);
+  }catch(e){
+    showNotif('error', e.message || 'Gagal mengirim notifikasi Telegram');
+  }finally{
+    btn.disabled = false; btn.innerHTML = old;
+  }
 });
