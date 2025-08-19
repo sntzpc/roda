@@ -478,6 +478,17 @@ function parseToken_(token){
   return payload;
 }
 
+/** Auth helper sederhana untuk handler yang butuh detail user */
+function requireAuth_(req){
+  try{
+    var t = parseToken_(req && req.token);
+    // Minimal field yang dipakai getOrders_: id, role, name, email (opsional)
+    return { id: t.sub, role: t.role, name: t.sub, email: '' };
+  }catch(e){
+    throw new Error('Unauthorized');
+  }
+}
+
 /****************************************
  * ========== SETTINGS → CONFIG =========
  ****************************************/
@@ -1343,134 +1354,141 @@ function skipGuest(req){
  *   { orders: [...], total: number }
  ****************************************************/
 function getOrders_(req){
-  // --- Auth ---
-  var user = requireAuth_ ? requireAuth_(req) : null; // { id, role, name, email }
-  if (!user) throw new Error('Unauthorized');
+  var user = requireAuth_(req);
+  var scope = String(req.scope||'mine').toLowerCase();
+  var sinceDays = Math.max(1, +req.sinceDays || 30);
+  var page = Math.max(1, +req.page || 1);
+  var pageSize = Math.max(1, +req.pageSize || 500);
 
-  var sinceDays = Number(req && req.sinceDays || 30);
-  var scope     = (req && req.scope) || ( (user.role==='Admin' || user.role==='Master') ? 'all' : 'mine' );
-  var page      = Number(req && req.page || 1);
-  var pageSize  = Number(req && req.pageSize || 500);
+  var sh = getSheetByNames_(["Orders","orders","ORDERS"]);
+  if (!sh) return { orders: [], total:0, page:1, pageSize:pageSize };
 
-  // --- Sheet lookup (multi-alias agar fleksibel) ---
-  var shOrders  = _getSheetByAliases_(['ORDERS','Orders','Order','Pesanan','Pemesanan','ORDER','DATA_ORDER']);
-  if (!shOrders) throw new Error('Sheet Orders tidak ditemukan');
+  // --- preload referensi alokasi (supaya Kendaraan/Driver tidak kosong) ---
+  var ogu = rows_(SH(SHEETS.OGU)) || [];
+  var veh = rows_(SH(SHEETS.VEH)) || [];
+  var drv = rows_(SH(SHEETS.DRV)) || [];
 
-  var shVehicles = _getSheetByAliases_(['VEHICLES','Vehicles','Kendaraan','KENDARAAN','MASTER_KENDARAAN']);
-  var shDrivers  = _getSheetByAliases_(['DRIVERS','Drivers','Driver','DRIVER','Supir','Sopir','MASTER_DRIVER']);
-  var shUsers    = _getSheetByAliases_(['USERS','Users','Pengguna','Akun','USER']);
+  // index cepat
+  var vehById = {}, drvById = {}, oguByOrder = {};
+  veh.forEach(function(v){ vehById[v.id] = v; });
+  drv.forEach(function(d){ drvById[d.id] = d; });
+  ogu.forEach(function(x){
+    var k = x.orderId;
+    if (!oguByOrder[k]) oguByOrder[k] = [];
+    oguByOrder[k].push(x);
+  });
 
-  // --- Baca tabel sebagai objek ---
-  var orders = _rowsToObjects_(shOrders);
-  var vehs   = shVehicles ? _indexBy_(_rowsToObjects_(shVehicles), ['id','vehicle_id','kendaraan_id']) : {};
-  var drvs   = shDrivers  ? _indexBy_(_rowsToObjects_(shDrivers ), ['id','driver_id','supir_id','sopir_id']) : {};
-  var usrs   = shUsers    ? _indexBy_(_rowsToObjects_(shUsers   ), ['id','user_id']) : {};
+  var vals = sh.getDataRange().getValues();
+  if (vals.length < 2) return { orders: [], total:0, page:1, pageSize:pageSize };
 
-  var cutTs = Date.now() - sinceDays*24*60*60*1000;
+  var head = vals[0], idx = headerIdx_(head);
+  var cutoff = Date.now() - sinceDays*24*60*60*1000;
 
-  // --- Normalisasi + filter ---
-  var out = [];
-  for (var i=0;i<orders.length;i++){
-    var r = orders[i];
+  function cell(row, i){ return (i>=0 && i<row.length) ? row[i] : ''; }
 
-    var id        = _pick(r, ['id','order_id','no_order','no']);
-    var orderNo   = _pick(r, ['order_no','nomor_order','no_order','no']) || id || '';
-    var createdAt = _dateIso(_pick(r, ['created_at','tgl_order','created','timestamp','waktu_order']));
-    var lastUpd   = _dateIso(_pick(r, ['last_update','updated_at','mtime'])) || createdAt;
-    var status    = String(_pick(r, ['status','order_status']) || 'Pending');
+  var rows = [];
+  for (var r=1;r<vals.length;r++){
+    var row = vals[r];
 
-    // 30 hari terakhir
-    var t0 = Date.parse(lastUpd || createdAt || '');
-    if (!(t0>=cutTs)) continue;
+    var createdIso = asIso_(cell(row, idx.created_at));
+    var lastIso    = asIso_(cell(row, idx.last_update));
+    var depIsoRaw  = asIso_(cell(row, idx.depart_at));
+    var arrIsoRaw  = asIso_(cell(row, idx.arrive_at));
 
-    // Scope: mine vs all (cocokkan id/email/name yang umum dipakai)
-    var createdBy      = _pick(r, ['created_by','pemesan_id','user_id','requester_id','id_user']);
-    var createdByEmail = _pick(r, ['created_by_email','email_user']);
-    var createdByName  = _pick(r, ['created_by_name','nama_user','requester_name','dibuat_oleh']);
+    // pakai last_update -> created_at -> depart/arrive untuk filter
+    var pivotIso = lastIso || createdIso || depIsoRaw || arrIsoRaw || '';
+    var tick = Date.parse(pivotIso);
+    if (!(tick>0) || tick < cutoff) continue;
 
-    var isMine = false;
-    if (createdBy && user.id && String(createdBy)==String(user.id)) isMine = true;
-    if (!isMine && createdByEmail && user.email && String(createdByEmail).toLowerCase()==String(user.email).toLowerCase()) isMine = true;
-    if (!isMine && createdByName && user.name && String(createdByName).toLowerCase()==String(user.name).toLowerCase()) isMine = true;
-
-    if (scope!=='all' && !(user.role==='Admin'||user.role==='Master')){
-      if (!isMine) continue;
+    // scope 'mine' → hanya milik saya (kecuali admin/master)
+    if (scope === 'mine' && !isAdmin_(user)){
+      var meId = String(user.id||'').toLowerCase();
+      var meNm = String(user.name||'').toLowerCase();
+      var meEm = String(user.email||'').toLowerCase();
+      var cb   = String(cell(row, idx.created_by)||'').toLowerCase();
+      var cbn  = String(cell(row, idx.created_by_name)||'').toLowerCase();
+      var cbe  = String(cell(row, idx.created_by_email)||'').toLowerCase();
+      if (!(meId && cb && meId===cb) && !(meNm && cbn && meNm===cbn) && !(meEm && cbe && meEm===cbe)) {
+        continue;
+      }
     }
 
-    // Tujuan / Kegiatan
-    var destination = _pick(r, ['destination','tujuan','kegiatan','activity','dest']);
+    var orderId = cell(row, idx.id) || String(r);
+    var vehName = cell(row, idx.vehicle_name), vehPlate = cell(row, idx.vehicle_plate);
+    var drvName = cell(row, idx.driver_name),  drvPhone = cell(row, idx.driver_phone);
 
-    // Kendaraan & Driver
-    var vehicleId = _pick(r, ['allocated_vehicle_id','vehicle_id','kendaraan_id']);
-    var driverId  = _pick(r, ['driver_id','supir_id','sopir_id']);
+    // ---- Fallback alokasi dari OGU bila kolom Orders kosong ----
+    if ((!vehName && !vehPlate) || !drvName){
+      var ogs = (oguByOrder[orderId]||[]).filter(function(x){ return isApproved_(x.approved); });
+      if (ogs.length){
+        var vIds = Array.from(new Set(ogs.map(function(x){return x.vehicleId;}).filter(Boolean)));
+        var dIds = Array.from(new Set(ogs.map(function(x){return x.driverId; }).filter(Boolean)));
 
-    var vObj = vehs[ String(vehicleId||'') ] || null;
-    var dObj = drvs[ String(driverId ||'') ] || null;
-    var uObj = usrs[ String(createdBy||'') ] || null;
-
-    // Waktu berangkat/tiba
-    var departAt   = _dateIso(_pick(r, ['depart_at','waktu_berangkat','berangkat_at','start_at']));
-    var departFrom = _pick(r, ['depart_from','berangkat_dari','start_loc','asal']);
-    var departBy   = _pick(r, ['depart_by','berangkat_oleh','driver_depart']);
-
-    var arriveAt = _dateIso(_pick(r, ['arrive_at','waktu_tiba','tiba_at','finish_at']));
-    var arriveTo = _pick(r, ['arrive_to','tiba_di','end_loc','tujuan_akhir']);
-    var arriveBy = _pick(r, ['arrive_by','tiba_oleh','driver_arrive']);
-
-    // Status history (opsional JSON di sel)
-    var sh = _pick(r, ['status_history','riwayat_status']);
-    var statusHistory = [];
-    if (sh){
-      try{
-        // izinkan JSON string, atau "timestamp|status|by;..."
-        if (typeof sh === 'string' && sh.trim().startsWith('[')) {
-          statusHistory = JSON.parse(sh);
-        } else if (typeof sh === 'string'){
-          var parts = sh.split(';').map(function(s){return s.trim();}).filter(Boolean);
-          statusHistory = parts.map(function(line){
-            var a = line.split('|').map(function(s){return s.trim();});
-            return { at:_dateIso(a[0]), status:a[1]||'', by:a[2]||'' };
+        if (!vehName && !vehPlate && vIds.length){
+          var vNames = [], vPlates=[];
+          vIds.forEach(function(id){
+            var v = vehById[id]||{};
+            if (v.name)  vNames.push(String(v.name));
+            if (v.plate) vPlates.push(String(v.plate));
           });
-        } else if (Array.isArray(sh)){
-          statusHistory = sh;
+          if (vNames.length || vPlates.length){
+            vehName  = vNames.join(', ');
+            vehPlate = vPlates.join(', ');
+          }
         }
-      }catch(e){ statusHistory = []; }
+
+        if (!drvName && dIds.length){
+          var dNames=[], dPhone='';
+          dIds.forEach(function(id){ var d=drvById[id]||{}; if(d.name) dNames.push(String(d.name)); });
+          if (dIds.length===1){ var d1=drvById[dIds[0]]||{}; dPhone = d1.wa || d1.phone || ''; }
+          if (dNames.length){
+            drvName = dNames.join(', ');
+            drvPhone = drvPhone || dPhone;
+          }
+        }
+      }
     }
 
-    out.push({
-      id: id,
-      order_no: orderNo,
-      created_at: createdAt,
-      last_update: lastUpd,
-      status: status,
+    // ---- Kegiatan/Tujuan: pastikan ada fallback wajar ----
+    var tujuan = cell(row, idx.destination) || cell(row, idx.to) || '';
+    var asal   = cell(row, idx.from) || '';
+    var activity = cell(row, idx.agenda) || '';
+    if (!tujuan && (asal || tujuan)){
+      // jika header tujuan kosong di sheet tertentu, tampilkan route
+      tujuan = (asal || tujuan) ? (asal + (tujuan ? ' → ' + tujuan : '')) : '';
+    }
 
-      destination: destination,
-      activity: destination, // alias utk FE
+    var obj = {
+      id: orderId,
+      order_no: orderId,
+      created_at: createdIso || lastIso || depIsoRaw || arrIsoRaw || '',
+      destination: tujuan || '',
+      activity: activity || '',
+      status: cell(row, idx.status) || '',
+      last_update: lastIso || createdIso || depIsoRaw || arrIsoRaw || ''
+    };
 
-      allocated_vehicle: vObj ? { name: vObj.name || vObj.nama || '', plate: vObj.plate || vObj.nopol || vObj.plat || '' } : null,
-      driver: dObj ? { name: dObj.name || dObj.nama || '', phone: dObj.phone || dObj.hp || dObj.telp || '' } : null,
+    if (vehName || vehPlate) obj.allocated_vehicle = { name:String(vehName||''), plate:String(vehPlate||'') };
+    if (drvName || drvPhone) obj.driver = { name:String(drvName||''), phone:String(drvPhone||'') };
+    if (depIsoRaw) obj.depart = { at: depIsoRaw };
+    if (arrIsoRaw) obj.arrive = { at: arrIsoRaw };
 
-      depart: (departAt||departFrom||departBy) ? { at: departAt||'', from: departFrom||'', by: departBy||'' } : null,
-      arrive: (arriveAt||arriveTo||arriveBy) ? { at: arriveAt||'', to: arriveTo||'', by: arriveBy||'' } : null,
-
-      created_by: String(createdBy||''),
-      created_by_name: (createdByName || (uObj && (uObj.name||uObj.nama))) || '',
-      status_history: statusHistory
-    });
+    rows.push(obj);
   }
 
-  // Sort desc by created_at
-  out.sort(function(a,b){ return (new Date(b.created_at)) - (new Date(a.created_at)); });
+  // urutkan terbaru
+  rows.sort(function(a,b){
+    function pick(x){ return x.last_update || x.created_at || (x.depart && x.depart.at) || (x.arrive && x.arrive.at) || 0; }
+    return new Date(pick(b)) - new Date(pick(a));
+  });
 
-  // Paging (opsional)
-  var total = out.length;
-  if (page>0 && pageSize>0){
-    var start = (page-1)*pageSize;
-    out = out.slice(start, start+pageSize);
-  }
+  var total = rows.length;
+  var start = (page-1)*pageSize;
+  var pageRows = rows.slice(start, start+pageSize);
 
-  return { orders: out, total: total };
+  return { orders: pageRows, total: total, page: page, pageSize: pageSize };
 }
+
 
 /********** Helpers khusus handler ini **********/
 function _getSheetByAliases_(names){
@@ -2092,6 +2110,66 @@ function _setOrdFlag_(orderId, key){
     }
   }
   return false;
+}
+
+
+function isAdmin_(u){ var r=(u&&u.role)||''; return r==='admin'||r==='master'; }
+
+function getSheetByNames_(names){
+  var ss = SpreadsheetApp.getActive(), sheets = ss.getSheets();
+  var wanted = names.map(function(n){ return String(n).toLowerCase(); });
+  for (var i=0;i<sheets.length;i++){
+    var nm = String(sheets[i].getName()).toLowerCase();
+    if (wanted.indexOf(nm)>=0) return sheets[i];
+  }
+  // fallback: cari sheet yang mengandung "order"
+  for (var j=0;j<sheets.length;j++){
+    var nm2 = String(sheets[j].getName()).toLowerCase();
+    if (nm2.indexOf('order')>=0) return sheets[j];
+  }
+  return null;
+}
+
+function headerIdx_(headers){
+  var h = headers.map(function(x){ return String(x||'').trim().toLowerCase(); });
+  function any(arr){ for (var i=0;i<arr.length;i++){ var k=h.indexOf(arr[i]); if (k!==-1) return k; } return -1; }
+  return {
+    id: any(['id','order_id','orderid','order no','order_no','no order','no_order','no']),
+    created_at: any(['created_at','createdat','created','timestamp','tgl','tanggal','order_date','date']),
+    created_by: any(['created_by','username','user','pemesan','pemohon','requested_by','created_by_user']),
+    created_by_name: any(['created_by_name','pemesan','nama pemesan','nama','name']),
+    created_by_email: any(['created_by_email','email']),
+    agenda: any(['agenda','kegiatan','activity']),
+    destination: any(['destination','tujuan']),
+    from: any(['from','asal']),
+    to: any(['to','tujuan']),
+    status: any(['status']),
+    last_update: any(['last_update','updated_at','update_at','modified']),
+    vehicle_name: any(['vehicle_name','kendaraan','armada','mobil']),
+    vehicle_plate: any(['vehicle_plate','plate','nopol','no_pol','no polisi','no_polisi','no-pol']),
+    driver_name: any(['driver','driver_name','supir']),
+    driver_phone: any(['driver_phone','no_wa_driver','wa_driver','phone_driver','no wa driver']),
+    // tambahkan alias field tanggal yang lazim di sheet Anda:
+    depart_at: any(['depart_at','berangkat_at','tgl_berangkat','jam_berangkat','renc_berangkat','renc. berangkat','berangkatiso']),
+    arrive_at: any(['arrive_at','tiba_at','tgl_tiba','jam_tiba','pulangiso'])
+  };
+}
+
+
+
+function asIso_(v){
+  if (!v) return '';
+  if (v instanceof Date) return v.toISOString();
+  var s = String(v);
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString();
+  var m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m){
+    var day=+m[1], mon=+m[2]-1, yr=+m[3]; if (yr<100) yr+=2000;
+    var hh=+m[4]||0, mm=+m[5]||0, ss=+m[6]||0;
+    return new Date(yr,mon,day,hh,mm,ss).toISOString();
+  }
+  return '';
 }
 
 

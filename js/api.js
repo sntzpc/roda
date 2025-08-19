@@ -2,7 +2,7 @@
 import { block } from './notif.js';
 
 // <<< SET: URL Web App GAS kamu >>>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbybUY0IoajbHefy7B3soQ3mN3ESap8LJQJYsvlICROaiAFWgrTLSJ2OmBFC5rXmDkKR/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx845BlUVUsanADyHX1gjw77H5ZpU6_YTb9BilUQuRqrnWdZusW92F3T8ktg8O99fW-/exec';
 
 // Ambil token dari localStorage
 function getToken() {
