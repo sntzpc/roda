@@ -41,6 +41,7 @@
         <ul id="navMenu" class="navbar-nav me-auto mb-2 mb-lg-0">
             <li class="nav-item role-admin role-master"><a class="nav-link" href="#" data-route="dashboard">Dashboard</a></li>
             <li class="nav-item role-user role-admin role-master"><a class="nav-link" href="#" data-route="order">Order</a></li>
+            <li class="nav-item role-user role-admin role-master"><a class="nav-link" href="#" data-route="myorder">My Order</a></li>
             <li class="nav-item role-user role-admin role-master"><a class="nav-link" href="#" data-route="vehicles">Kendaraan</a></li>
             <li class="nav-item role-admin role-master"><a class="nav-link" href="#" data-route="approvals">Persetujuan</a></li>
             <li class="nav-item role-driver role-admin role-master"><a class="nav-link" href="#" data-route="driver">Driver</a></li>
@@ -244,6 +245,102 @@
         </div>
       </div>
     </section>
+
+    <!-- My Order (User/Admin/Master) -->
+<section data-page="myorder" class="d-none">
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <h5 class="card-title mb-0">My Order</h5>
+        <div class="ms-auto small text-muted">
+          Menampilkan order <b>30 hari</b> terakhir
+        </div>
+      </div>
+
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-6">
+          <label class="form-label">Pencarian</label>
+          <input id="myOrderSearch" class="form-control" placeholder="Cari nomor/kegiatan/driver…">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Status</label>
+          <select id="myOrderStatus" class="form-select">
+            <option value="">Semua Status</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Allocated">Allocated</option>
+            <option value="On Trip">On Trip</option>
+            <option value="Arrived">Arrived</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-grid">
+          <button id="btnMyOrderRefresh" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-repeat"></i> Refresh
+          </button>
+        </div>
+      </div>
+
+      <div class="table-wrap table-responsive nowrap" data-hint="1">
+        <table id="tblMyOrder" class="table table-sm align-middle table-sticky-first">
+          <thead class="table-light">
+            <tr>
+              <th>No. Order</th>
+              <th>Tanggal</th>
+              <th>Kegiatan / Tujuan</th>
+              <th>Status</th>
+              <th>Kendaraan</th>
+              <th>Driver</th>
+              <th>Berangkat</th>
+              <th>Tiba</th>
+              <th style="width:90px">Aksi</th>
+            </tr>
+          </thead>
+          <tbody><!-- diisi via JS --></tbody>
+        </table>
+      </div>
+
+      <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+        <div class="btn-group" role="group" aria-label="Pager">
+          <button id="myOrderPrev" class="btn btn-outline-secondary btn-sm">&laquo; Sebelumnya</button>
+          <button id="myOrderNext" class="btn btn-outline-secondary btn-sm">Berikutnya &raquo;</button>
+        </div>
+        <span id="myOrderPageInfo" class="ms-2 small text-muted">Hal. 1/1</span>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <div class="input-group input-group-sm" style="width:160px">
+            <span class="input-group-text">Page Size</span>
+            <select id="myOrderPageSize" class="form-select">
+              <option>10</option><option selected>20</option><option>50</option><option>100</option>
+            </select>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="myOrderAutoRefresh" checked>
+            <label for="myOrderAutoRefresh" class="form-check-label small">Auto refresh (45s)</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Modal Detail My Order (Bootstrap) -->
+<div class="modal fade" id="modalMyOrderDetail" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="moTitle">Detail Order</h6>
+        <button class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body" id="moBody"><!-- diisi via JS --></div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Tutup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
     <!-- Kendaraan -->
     <section data-page="vehicles" class="d-none">
@@ -635,6 +732,7 @@
   <script type="module" src="js/cashier.js"></script>
   <script type="module" src="js/journal.js"></script>
   <script type="module" src="js/settings.js"></script>
+  <script type="module" src="js/myorder.js"></script>
   <script type="module" src="js/dashboard.js"></script>
 
   <style>

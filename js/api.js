@@ -2,12 +2,16 @@
 import { block } from './notif.js';
 
 // <<< SET: URL Web App GAS kamu >>>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyQgEvOfwTiAZlBghwtAPYWH_uHz_SaRD_7aprcUcAHmsXZe8UjEGH3b0gQLDeA3LXm/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbw2WJlPWLIXxVLeBcWA0Jqfj0Zh8hP9i3DN9vsuCQau4KPlnT1uwFwBAS0OEeHZar--/exec';
 
 // Ambil token dari localStorage
 function getToken() {
   try {
-    return (JSON.parse(localStorage.getItem('roda_token') || '{}').token) || '';
+    const a = JSON.parse(localStorage.getItem('authToken') || 'null');
+    if (a?.token) return a.token;
+    // fallback kompatibilitas lama
+    const b = JSON.parse(localStorage.getItem('roda_token') || 'null');
+    return b?.token || '';
   } catch { return ''; }
 }
 
@@ -57,9 +61,8 @@ function Utilities_b64encode(str) {
 }
 
 // --- POST dengan fallback JSONP, no-block untuk 'ping' & 'login'
-// --- POST dengan fallback JSONP
 async function post(action, payload = {}) {
-  const token = (JSON.parse(localStorage.getItem('roda_token') || '{}').token) || '';
+  const token = getToken();
   const body  = { action, ...payload, token };
 
   const runFetch = async () => {
@@ -86,6 +89,72 @@ async function post(action, payload = {}) {
     try { return await runFetch(); }
     catch { return await jsonpCall(action, payload); }
   });
+}
+
+// ===== Fetch My Orders (30 hari terakhir) =====
+// scope: 'mine' (User) atau 'all' (Admin/Master)
+export async function fetchMyOrders({ sinceDays=30, scope='mine', page=1, pageSize=500 } = {}){
+  const payload = {
+    action: 'getOrders',
+    token: getToken(),
+    scope,
+    sinceDays,
+    page,
+    pageSize
+  };
+
+  // 1) Coba POST biasa
+  try{
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const json = await res.json();
+
+    // format router GAS: { ok, data }
+    if (json && json.ok && json.data && Array.isArray(json.data.orders)) {
+      return json.data.orders;
+    }
+    if (json && json.data && Array.isArray(json.data)) {
+      return json.data; // fallback jika handler return array langsung
+    }
+    if (json && Array.isArray(json.orders)) {
+      return json.orders;
+    }
+    throw new Error(json && json.error ? json.error : 'Format respons tidak dikenal');
+  }catch(err){
+    console.warn('[fetchMyOrders] POST gagal, mencoba JSONP fallback:', err);
+  }
+
+  // 2) Fallback JSONP: doGet?jsonp=1&action=getOrders&q=<websafe>
+  const q = webSafeBase64(JSON.stringify(payload));
+  const cb = 'cb'+Math.random().toString(36).slice(2);
+
+  return new Promise((resolve,reject)=>{
+    const s = document.createElement('script');
+    const url = `${GAS_URL.replace('/exec','/exec')}?jsonp=1&action=getOrders&cb=${cb}&q=${encodeURIComponent(q)}`;
+    window[cb] = (resp)=>{
+      try{
+        delete window[cb];
+        s.remove();
+      }catch(e){}
+      if (resp && resp.ok && resp.data && Array.isArray(resp.data.orders)) return resolve(resp.data.orders);
+      if (resp && resp.ok && Array.isArray(resp.data)) return resolve(resp.data);
+      if (resp && Array.isArray(resp.orders)) return resolve(resp.orders);
+      return reject(new Error(resp && resp.error ? resp.error : 'Format JSONP tidak dikenal'));
+    };
+    s.onerror = ()=>{ try{ delete window[cb]; s.remove(); }catch(e){}; reject(new Error('JSONP gagal')); };
+    s.src = url;
+    document.head.appendChild(s);
+  });
+
+  // helper
+  function webSafeBase64(str){
+    const b = btoa(unescape(encodeURIComponent(str)));
+    return b.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
 }
 
 

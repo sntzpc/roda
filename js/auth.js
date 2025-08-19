@@ -34,9 +34,9 @@ function toggleLoginForm(disabled){
    Aturan halaman per role
    ========================= */
 const ALLOWED_PAGES = {
-  master:  ['dashboard','order','vehicles','approvals','driver','journal','settings','cashier'],
-  admin:   ['dashboard','order','vehicles','approvals','driver','journal','settings','cashier'],
-  user:    ['order','vehicles','settings'],
+  master:  ['dashboard','order','myorder','vehicles','approvals','driver','journal','settings','cashier'],
+  admin:   ['dashboard','order', 'myorder','vehicles','approvals','driver','journal','settings','cashier'],
+  user:    ['order', 'myorder','vehicles','settings'],
   driver:  ['driver'],
   cashier: ['cashier'] // <-- baru
 };

@@ -26,7 +26,7 @@ export function showPage(page){
     sec.classList.toggle('d-none', sec.dataset.page !== page);
   });
 
-  // 3) broadcast event "route" utk lazy loaders (vehicles, settings, dll)
+  // 3) broadcast event "route" utk lazy loaders (vehicles, settings, myorder, dll)
   window.dispatchEvent(new CustomEvent('route', { detail:{ page } }));
 }
 
@@ -40,11 +40,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
       const page = a.dataset.route;
       showPage(page);
 
-      // Tutup hamburger (offcanvas/collapse) bila terbuka
+      // Tutup hamburger (collapse) bila terbuka
       const nav = q('#navMain');
       if (nav?.classList.contains('show')) {
-        const bs = bootstrap.Collapse.getInstance(nav) || new bootstrap.Collapse(nav, {toggle:false});
-        bs.hide();
+        const bs = (window.bootstrap && (bootstrap.Collapse.getInstance(nav) || new bootstrap.Collapse(nav, {toggle:false})));
+        bs?.hide();
       }
     });
   });
@@ -54,7 +54,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
    DateTime modal picker (dipakai di Order)
    ========================= */
 let dtState = { cb:null };
-const mdlDt = new bootstrap.Modal('#mdlDateTime');
+const mdlDt = (window.bootstrap ? new bootstrap.Modal('#mdlDateTime') : null);
 
 export function pickDateTime(targetInputSelector, cb){
   dtState = { cb };
@@ -62,7 +62,7 @@ export function pickDateTime(targetInputSelector, cb){
   const now = new Date(); now.setMinutes(now.getMinutes()+30);
   q('#dtDate').value = now.toISOString().slice(0,10);
   q('#dtTime').value = now.toISOString().slice(11,16);
-  mdlDt.show();
+  mdlDt?.show();
 }
 
 q('#btnDtOk')?.addEventListener('click', ()=>{
@@ -71,6 +71,5 @@ q('#btnDtOk')?.addEventListener('click', ()=>{
   if (!d || !t) return;
   const iso = `${d}T${t}:00`;
   dtState.cb?.(iso);
-  mdlDt.hide();
+  mdlDt?.hide();
 });
-
