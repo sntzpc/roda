@@ -4,19 +4,17 @@
 // Fitur: ambil 30 hari terakhir, cache LS, filter/paging, detail modal (Bootstrap)
 // =====================================================
 
-import * as API from './api.js';                 // ⬅ ganti: import namespace
+import * as API from './api.js';
 import { auth } from './auth.js';
 
-const fetchMyOrders = API.fetchMyOrders;         // ⬅ ambil fungsi yang kita perlu
-
-// ====== Fallback ringkas untuk toast bila belum ada util ======
+// ====== Fallback toast ======
 const _hasToast = (typeof window.toastSuccess === 'function' && typeof window.toastError === 'function');
 function toastSuccess(msg){ _hasToast ? window.toastSuccess(msg) : console.log('[OK]', msg); }
 function toastError(msg){ _hasToast ? window.toastError(msg) : console.error('[ERR]', msg); }
 
 // ====== Konstanta ======
 const CACHE_KEY = 'MYORDERS_CACHE_V1';   // { ts:number, list:[] }
-const CACHE_TTL_MS = 2 * 60 * 1000;      // refresh minimal tiap 2 menit jika di-refresh manual
+const CACHE_TTL_MS = 2 * 60 * 1000;      // minimal 2 menit
 const SINCE_DAYS = 30;
 const ALLOWED_ROLES = ['user','admin','master'];
 
@@ -31,7 +29,7 @@ let _pageSize = 20;
 let _timer = null;
 let _inited = false;
 
-// ====== Helpers role/state (tanpa bergantung export state dari api.js) ======
+// ====== Helpers role/state ======
 function currentRole(){
   try{
     const r0 = auth?.user?.role;
@@ -46,15 +44,15 @@ function currentRole(){
 function hasAccess(){
   return ALLOWED_ROLES.includes(currentRole());
 }
+
 function isWithinDays(iso, days){
   if (!iso) return false;
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return false;
-  const now = Date.now();
-  return (now - t) <= days * 24 * 60 * 60 * 1000;
+  return (Date.now() - t) <= days * 24 * 60 * 60 * 1000;
 }
 
-// format: dd/mm/yyyy | HH:MM:SS (24h)
+// format: dd/mm/yyyy | HH:MM:SS
 function fmtDateTimeID(iso){
   if (!iso) return '-';
   const d = new Date(iso);
@@ -73,7 +71,7 @@ function statusBadgeClass(s){
     case 'in transit': return 'badge text-bg-danger';
     case 'arrived': return 'badge text-bg-info';
     case 'cancelled':
-    case 'pending': 
+    case 'pending':
     default: return 'badge text-bg-secondary';
   }
 }
@@ -85,10 +83,9 @@ function loadCache(){
     if (!raw) return null;
     const obj = JSON.parse(raw);
     if (!obj || !Array.isArray(obj.list)) return null;
-    // Prune 30 hari
     obj.list = obj.list.filter(r => isWithinDays(r.last_update || r.created_at, SINCE_DAYS));
     return obj;
-  }catch(e){ return null; }
+  }catch{ return null; }
 }
 function saveCache(list){
   const pruned = (list||[]).filter(r => isWithinDays(r.last_update || r.created_at, SINCE_DAYS));
@@ -152,15 +149,16 @@ function applyFilter(){
 }
 
 function attachEvents(){
-  // klik detail
-  $tbody.addEventListener('click', (ev)=>{
-    const btn = ev.target.closest('[data-act="detail"]');
-    if (btn){
-      const id = btn.dataset.id;
-      const item = _all.find(x=> String(x.id)===String(id));
-      if (item) openDetail(item);
-    }
-  });
+  if ($tbody) {
+    $tbody.addEventListener('click', (ev)=>{
+      const btn = ev.target.closest('[data-act="detail"]');
+      if (btn){
+        const id = btn.dataset.id;
+        const item = _all.find(x=> String(x.id)===String(id));
+        if (item) openDetail(item);
+      }
+    });
+  }
 
   $search.addEventListener('input', debounce(applyFilter, 200));
   $status.addEventListener('change', applyFilter);
@@ -251,47 +249,29 @@ async function refresh(force=false){
     }
 
     // Ambil dari server (30 hari terakhir)
-    const scope = (['Admin','Master'].includes(currentRole())) ? 'all' : 'mine';
-    const list = await fetchMyOrders({ sinceDays: SINCE_DAYS, scope });
+    const role = currentRole(); // sudah lowercase
+    const scope = (role === 'admin' || role === 'master') ? 'all' : 'mine';
+
+    let list = await API.fetchMyOrders({ sinceDays: SINCE_DAYS, scope });
+
+    // (opsional) bila kosong, coba 60 hari untuk validasi cepat
+    if (!Array.isArray(list) || list.length === 0) {
+      console.info('[MyOrder] Tidak ada data 30 hari; mencoba 60 hari untuk validasi');
+      list = await API.fetchMyOrders({ sinceDays: 60, scope });
+    }
 
     saveCache(list);   // simpan cache (pruned 30 hari)
     _all = list;
+    console.info('[MyOrder] orders:', Array.isArray(_all) ? _all.length : 0, { scope, sinceDays: SINCE_DAYS });
     applyFilter();
-    toastSuccess('Data My Order diperbarui.');
+    if (!_all.length) {
+      toastSuccess('My Order: tidak ada data pada periode ini.');
+    } else {
+      toastSuccess('Data My Order diperbarui.');
+    }
   }catch(err){
     console.error(err);
     toastError('Gagal memuat My Order.');
-  }
-}
-
-export async function fetchMyOrders({ sinceDays=30, scope='mine', page=1, pageSize=500 } = {}){
-  const payload = {
-    action: 'getOrders',
-    token: getToken(),
-    scope, sinceDays, page, pageSize
-  };
-  const q   = webSafeBase64(JSON.stringify(payload));
-  const cb  = 'cb'+Math.random().toString(36).slice(2);
-  const sep = GAS_URL.includes('?') ? '&' : '?'; // GAS_URL Anda bisa sudah punya query
-  const url = `${GAS_URL}${sep}jsonp=1&action=getOrders&cb=${cb}&q=${encodeURIComponent(q)}`;
-
-  return new Promise((resolve,reject)=>{
-    const s = document.createElement('script');
-    window[cb] = (resp)=>{
-      try{ delete window[cb]; s.remove(); }catch(e){}
-      if (resp && resp.ok && resp.data && Array.isArray(resp.data.orders)) return resolve(resp.data.orders);
-      if (resp && resp.ok && Array.isArray(resp.data)) return resolve(resp.data);
-      if (resp && Array.isArray(resp.orders)) return resolve(resp.orders);
-      return reject(new Error(resp && resp.error ? resp.error : 'Format JSONP tidak dikenal'));
-    };
-    s.onerror = ()=>{ try{ delete window[cb]; s.remove(); }catch(e){}; reject(new Error('JSONP gagal')); };
-    s.src = url;
-    document.head.appendChild(s);
-  });
-
-  function webSafeBase64(str){
-    const b = btoa(unescape(encodeURIComponent(str)));
-    return b.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   }
 }
 
