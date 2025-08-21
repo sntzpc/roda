@@ -1,3 +1,16 @@
+// [ADD] Versi build (opsional untuk verifikasi di console)
+const __API_BUILD = '2025-08-22a';
+console.debug('[api.js] build', __API_BUILD);
+
+// [ADD] Helper tersedia di scope modul + dipasang ke window (cadangan)
+function isApproved_(v){
+  if (v === true || v === 1) return true;
+  const t = String(v ?? '').toUpperCase();
+  return (t === 'TRUE' || t === '1' || t === 'YA');
+}
+try { window.isApproved_ = window.isApproved_ || isApproved_; } catch {}
+
+
 // api.js
 import { block } from './notif.js';
 
