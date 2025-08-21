@@ -717,6 +717,15 @@
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
+  <script>
+  // Pastikan global: ini menutup celah jika ada file lama yang masih memanggil isApproved_
+  window.isApproved_ = window.isApproved_ || function(v){
+    if (v === true || v === 1) return true;
+    var t = String(v == null ? '' : v).toUpperCase();
+    return (t === 'TRUE' || t === '1' || t === 'YA');
+  };
+</script>
+
   <!-- App scripts (module order matters) -->
    <script type="module" src="js/debug.js"></script>
   <script type="module" src="js/util.js"></script>

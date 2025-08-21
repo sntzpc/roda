@@ -24,38 +24,43 @@ function isCrossOrigin(url){
 // --- JSONP fallback ---
 function jsonpCall(action, payload = {}) {
   return new Promise((resolve, reject) => {
-    const token = getToken();
+    const token  = getToken();
     const reqObj = { action, ...payload, token };
-    const b64 = Utilities_b64encode(JSON.stringify(reqObj));
 
     const cbName = `__gas_cb_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const sep    = GAS_URL.includes('?') ? '&' : '?';
+    const q      = Utilities_b64encode(JSON.stringify(reqObj));
+    const url    = `${GAS_URL}${sep}jsonp=1&action=${encodeURIComponent(action)}&q=${encodeURIComponent(q)}&cb=${encodeURIComponent(cbName)}&_ts=${Date.now()}`;
+
     const script = document.createElement('script');
-    const sep = GAS_URL.includes('?') ? '&' : '?';
-    const url = `${GAS_URL}${sep}jsonp=1&action=${encodeURIComponent(action)}&q=${encodeURIComponent(b64)}&cb=${encodeURIComponent(cbName)}&_ts=${Date.now()}`;
+    let cleaned = false;
 
-
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error('JSONP timeout'));
-    }, 15000);
-
-    function cleanup() {
-      clearTimeout(timer);
+    function cleanup(){
+      if (cleaned) return; cleaned = true;
       if (window[cbName]) delete window[cbName];
-      if (script && script.parentNode) script.parentNode.removeChild(script);
+      if (script.parentNode) script.parentNode.removeChild(script);
     }
 
+    const timer = setTimeout(() => { cleanup(); reject(new Error('JSONP timeout')); }, 15000);
+
     window[cbName] = (resp) => {
+      clearTimeout(timer);
       cleanup();
-      if (!resp || resp.ok !== true) {
-        reject(new Error(resp?.error || 'GAS error (JSONP)'));
-      } else {
+      try {
+        if (!resp || resp.ok !== true) {
+          reject(new Error(resp?.error || 'GAS error (JSONP)'));
+          return;
+        }
+        // Penting: JANGAN transformasi data di sisi client.
+        // Biarkan server yang menyusun struktur data; teruskan apa adanya.
         resolve(resp.data);
+      } catch (e) {
+        reject(e);
       }
     };
 
+    script.onerror = () => { clearTimeout(timer); cleanup(); reject(new Error('JSONP network error')); };
     script.src = url;
-    script.onerror = () => { cleanup(); reject(new Error('JSONP network error')); };
     document.head.appendChild(script);
   });
 }
@@ -183,3 +188,4 @@ export const api = {
   settleTaskLetter:   (payload)                => post('settleTaskLetter', payload),
   listCashierJournal: (payload)                => post('listCashierJournal', payload),
 };
+
