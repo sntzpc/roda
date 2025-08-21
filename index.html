@@ -718,16 +718,12 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  // Wajib: buat *global binding* bernama `isApproved_`
-  // (bukan hanya property window) agar JSONP yang menyebut `isApproved_` tidak ReferenceError.
   if (typeof isApproved_ !== 'function') {
-    // memakai 'var' atau 'function' declaration => menghasilkan binding global & property window
     var isApproved_ = function(v){
       if (v === true || v === 1) return true;
       var t = String(v == null ? '' : v).toUpperCase();
       return (t === 'TRUE' || t === '1' || t === 'YA');
     };
-    // opsional: pastikan sinkron dengan window
     window.isApproved_ = isApproved_;
   }
 </script>

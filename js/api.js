@@ -14,6 +14,31 @@ try { window.isApproved_ = window.isApproved_ || isApproved_; } catch {}
 // api.js
 import { block } from './notif.js';
 
+// [ADD] Pastikan global binding klasik untuk isApproved_ tersedia
+function __ensureGlobal_isApproved() {
+  try {
+    if (typeof window !== 'undefined') {
+      if (typeof window.isApproved_ !== 'function') {
+        window.isApproved_ = function(v){
+          if (v === true || v === 1) return true;
+          var t = String(v == null ? '' : v).toUpperCase();
+          return (t === 'TRUE' || t === '1' || t === 'YA');
+        };
+      }
+      // Penting: buat *global variable binding* bernama `isApproved_`
+      // JSONP dari GAS dieksekusi di global sloppy scope dan butuh identifier ini.
+      if (typeof isApproved_ === 'undefined') {
+        window.eval('var isApproved_ = window.isApproved_;');
+      }
+    }
+  } catch (e) {
+    // ignore; kalau eval diblokir, minimal window.isApproved_ sudah ada
+  }
+}
+// jalankan sekali saat modul load
+__ensureGlobal_isApproved();
+
+
 // <<< SET: URL Web App GAS kamu >>>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx845BlUVUsanADyHX1gjw77H5ZpU6_YTb9BilUQuRqrnWdZusW92F3T8ktg8O99fW-/exec';
 
@@ -37,6 +62,7 @@ function isCrossOrigin(url){
 // --- JSONP fallback ---
 function jsonpCall(action, payload = {}) {
   return new Promise((resolve, reject) => {
+    __ensureGlobal_isApproved();
     const token  = getToken();
     const reqObj = { action, ...payload, token };
 
