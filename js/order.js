@@ -219,6 +219,96 @@ async function submitOrder(){
   }
 }
 
+// [ADD] UX Identitas Pemesan (Nama, Unit, Jabatan)
+// Sembunyikan Unit & Jabatan secara default, tampilkan otomatis bila Nama diubah
+// dan paksa pengisian saat Kirim Order jika kosong.
+(function () {
+  let _wired = false;
+
+  function toastErr(msg) {
+    if (typeof window.toastError === 'function') window.toastError(msg);
+    else alert(msg);
+  }
+
+  function setupOrderIdentityUX() {
+    const $page = document.querySelector('section[data-page="order"]');
+    if (!$page) return;
+
+    const nama = document.getElementById('ordNama');
+    const unit = document.getElementById('ordUnit');
+    const jab  = document.getElementById('ordJabatan');
+    const submitBtn = document.getElementById('btnSubmitOrder');
+
+    if (!nama || !unit || !jab || !submitBtn) return;
+
+    const unitWrap = unit.closest('.col-md-4') || unit.parentElement;
+    const jabWrap  = jab.closest('.col-md-4')  || jab.parentElement;
+
+    const hideUJ = () => {
+      unitWrap?.classList.add('d-none');
+      jabWrap?.classList.add('d-none');
+    };
+    const showUJ = () => {
+      unitWrap?.classList.remove('d-none');
+      jabWrap?.classList.remove('d-none');
+    };
+
+    // 1) Default: sembunyikan Unit & Jabatan
+    hideUJ();
+
+    // 2) Tambahkan tombol kecil "Ubah Unit & Jabatan" di bawah input Nama
+    if (!document.getElementById('btnEditIdent')) {
+      const btn = document.createElement('button');
+      btn.id = 'btnEditIdent';
+      btn.type = 'button';
+      btn.className = 'btn btn-link btn-sm ps-0';
+      btn.textContent = 'Ubah Unit & Jabatan';
+      // letakkan tepat setelah input Nama
+      nama.insertAdjacentElement('afterend', btn);
+      btn.addEventListener('click', showUJ);
+    }
+
+    // 3) Jika Nama diubah dari nilai awal → tampilkan Unit & Jabatan
+    const initialNama = (nama.value || '').trim();
+    nama.addEventListener('input', () => {
+      const curr = (nama.value || '').trim();
+      if (curr !== initialNama) showUJ();
+    });
+
+    // 4) Validasi sebelum submit:
+    //    - Jika Unit/Jabatan kosong → tampilkan field, tampilkan pesan, batalkan submit.
+    //    - Pakai capture=true agar handler ini berjalan lebih dulu dari handler lain.
+    submitBtn.addEventListener('click', (ev) => {
+      const u = (unit.value || '').trim();
+      const j = (jab.value  || '').trim();
+      if (!u || !j) {
+        showUJ();
+        toastErr('Lengkapi Unit dan Jabatan terlebih dahulu.');
+        // fokuskan ke field yang kosong
+        (!u ? unit : jab).focus();
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+      }
+    }, true);
+  }
+
+  // Jalankan saat pertama kali halaman "order" ditampilkan,
+  // plus fallback DOMContentLoaded bila routing tidak memicu event.
+  window.addEventListener('route', (ev) => {
+    if (ev?.detail?.page === 'order' && !_wired) {
+      _wired = true;
+      setupOrderIdentityUX();
+    }
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!_wired) {
+      _wired = true;
+      setupOrderIdentityUX();
+    }
+  });
+})();
+
+
 /* ========== INIT ========== */
 window.addEventListener('DOMContentLoaded', ()=>{
   // Identitas
