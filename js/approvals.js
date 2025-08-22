@@ -27,17 +27,22 @@ let busyDrv = new Set();
 const safe  = (s)=> (s==null ? '' : String(s));
 const lower = (s)=> safe(s).toLowerCase();
 
+// Perluas daftar status yang dianggap TERSEDIA
 const AVAILABLE_TAGS = [
-  'available','ready','free','idle','tersedia','siap','aktif','ready for use'
+  'available','ready','free','idle','tersedia','siap',
+  'aktif','active','on duty','on-duty','standby','online',
+  'ready for use'
 ];
+
+// Status yang jelas BUSY (jangan campur dengan yang "kurang jelas")
 const BUSY_TAGS = [
-  'allocated','on trip','in transit','departed','busy','occupied','assigned'
+  'allocated','on trip','in transit','departed','busy','occupied','assigned','driving','inactive'
 ];
 
 function normStatusRaw(obj, type='veh'){
-  // Ambil beberapa kemungkinan field status dari payload berbeda
+  // ambil kemungkinan field status dari berbagai skema data
   let raw = obj?.status ?? obj?.state ?? obj?.availability ?? '';
-  // boolean shortcut
+  // boolean hint
   if (obj?.available === false) raw = raw || 'unavailable';
   if (obj?.active === false)    raw = raw || 'inactive';
   return lower(raw);
@@ -46,7 +51,8 @@ function normStatusRaw(obj, type='veh'){
 function isAvailableByStatus(obj, type='veh'){
   const raw = normStatusRaw(obj, type);
   if (!raw) {
-    // jika tidak ada status eksplisit, kita anggap available KECUALI object punya active=false/available=false
+    // jika tidak ada status eksplisit, anggap available
+    // kecuali ada flag boolean yang menegaskan tidak aktif
     if (obj?.available === false || obj?.active === false) return false;
     return true;
   }
@@ -56,18 +62,23 @@ function isAvailableByStatus(obj, type='veh'){
 function buildBusyMapFromDashboard(dash) {
   busyVeh = new Set();
   busyDrv = new Set();
+
   if (dash && Array.isArray(dash.vehicles)) {
     dash.vehicles.forEach(v => {
       const id = v.id || v.vehicleId || v.vehId || v._id;
-      const s  = lower(v.status || v.state || (v.on_trip ? 'on trip' : ''));
-      if (id && (BUSY_TAGS.includes(s) || (s && !AVAILABLE_TAGS.includes(s)))) busyVeh.add(String(id));
+      const s  = lower(v.status || v.state || '');
+      // HANYA busy jika benar2 busy/berjalan, atau ada flag perjalanan
+      const isBusy = BUSY_TAGS.includes(s) || v.on_trip === true || v.onTrip === true;
+      if (id && isBusy) busyVeh.add(String(id));
     });
   }
+
   if (dash && Array.isArray(dash.drivers)) {
     dash.drivers.forEach(d => {
       const id = d.id || d.driverId || d._id || d.userId;
-      const s  = lower(d.status || d.state || (d.on_trip ? 'on trip' : ''));
-      if (id && (BUSY_TAGS.includes(s) || (s && !AVAILABLE_TAGS.includes(s)))) busyDrv.add(String(id));
+      const s  = lower(d.status || d.state || '');
+      const isBusy = BUSY_TAGS.includes(s) || d.on_trip === true || d.onTrip === true || d.assigned === true;
+      if (id && isBusy) busyDrv.add(String(id));
     });
   }
 }
