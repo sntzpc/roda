@@ -1,4 +1,4 @@
-// approvals.js — REPLACE (anti NA + BUSY + USED, rapi & ketat)
+// approvals.js — REPLACE (tidak mengubah status sampai Approve ditekan)
 import { q } from './util.js';
 import { showNotif } from './notif.js';
 import { api } from './api.js';
@@ -19,40 +19,32 @@ let busyVeh = new Set();
 let busyDrv = new Set();
 
 // ============================
-/* Status helpers
-   Kita menganggap AVAILABLE hanya jika status ada di AVAILABLE_TAGS (atau boolean available=true/active=true).
-   Sisanya dianggap NA (Not Available), mis. 'maintenance', 'service', 'rusak', 'offline', 'reserved', dll.
-   BUSY diambil dari dashboard (on trip/allocated/busy). */
+// Helpers: status
 // ============================
 const safe  = (s)=> (s==null ? '' : String(s));
 const lower = (s)=> safe(s).toLowerCase();
 
-// Perluas daftar status yang dianggap TERSEDIA
+// Status yang dianggap TERSEDIA
 const AVAILABLE_TAGS = [
   'available','ready','free','idle','tersedia','siap',
   'aktif','active','on duty','on-duty','standby','online',
   'ready for use'
 ];
 
-// Status yang jelas BUSY (jangan campur dengan yang "kurang jelas")
+// Status yang jelas BUSY
 const BUSY_TAGS = [
   'allocated','on trip','in transit','departed','busy','occupied','assigned','driving','inactive'
 ];
 
-function normStatusRaw(obj, type='veh'){
-  // ambil kemungkinan field status dari berbagai skema data
+function normStatusRaw(obj){
   let raw = obj?.status ?? obj?.state ?? obj?.availability ?? '';
-  // boolean hint
   if (obj?.available === false) raw = raw || 'unavailable';
   if (obj?.active === false)    raw = raw || 'inactive';
   return lower(raw);
 }
-
-function isAvailableByStatus(obj, type='veh'){
-  const raw = normStatusRaw(obj, type);
+function isAvailableByStatus(obj){
+  const raw = normStatusRaw(obj);
   if (!raw) {
-    // jika tidak ada status eksplisit, anggap available
-    // kecuali ada flag boolean yang menegaskan tidak aktif
     if (obj?.available === false || obj?.active === false) return false;
     return true;
   }
@@ -67,7 +59,6 @@ function buildBusyMapFromDashboard(dash) {
     dash.vehicles.forEach(v => {
       const id = v.id || v.vehicleId || v.vehId || v._id;
       const s  = lower(v.status || v.state || '');
-      // HANYA busy jika benar2 busy/berjalan, atau ada flag perjalanan
       const isBusy = BUSY_TAGS.includes(s) || v.on_trip === true || v.onTrip === true;
       if (id && isBusy) busyVeh.add(String(id));
     });
@@ -83,20 +74,17 @@ function buildBusyMapFromDashboard(dash) {
   }
 }
 
-// disabled jika:
-// - NA (status bukan available), atau
-// - busy dari dashboard, atau
-// - sudah dipakai di baris lain (in-order lock) dan bukan barisnya sendiri
+// disabled jika NA, BUSY, atau sudah dipakai baris lain (selain barisnya sendiri)
 function isVehDisabledByFlags({ id, vehObj, usedInOrder, selfUsing }) {
   if (!id) return false;
-  const na   = !isAvailableByStatus(vehObj, 'veh');
+  const na   = !isAvailableByStatus(vehObj);
   const busy = busyVeh.has(String(id));
   const used = usedInOrder.has(String(id)) && !selfUsing;
   return na || busy || used;
 }
 function isDrvDisabledByFlags({ id, drvObj, usedInOrder, selfUsing }) {
   if (!id) return false;
-  const na   = !isAvailableByStatus(drvObj, 'drv');
+  const na   = !isAvailableByStatus(drvObj);
   const busy = busyDrv.has(String(id));
   const used = usedInOrder.has(String(id)) && !selfUsing;
   return na || busy || used;
@@ -148,17 +136,15 @@ async function refresh(){
 }
 
 // ============================
-// Modal Alokasi (NA + BUSY + USED protections)
+// Modal Alokasi (proteksi NA/BUSY/USED; TANPA menyimpan saat pilih dropdown)
 // ============================
 async function openAlloc(orderId){
   currentOrderId = orderId;
 
-  // buat instance modal
   const modalEl = document.getElementById('mdlAlloc');
   bsAlloc = bootstrap.Modal.getOrCreateInstance(modalEl);
 
   try {
-    // master + guests + dashboard
     const [ve, dr, g, dash] = await Promise.all([
       vehicles.length ? Promise.resolve(vehicles) : api.listVehicles(),
       drivers.length  ? Promise.resolve(drivers)  : api.listDrivers(),
@@ -175,7 +161,6 @@ async function openAlloc(orderId){
     updateApproveAllState();
     bsAlloc.show();
 
-    // tombol Debug (opsional)
     if (isDbg() && !modalEl.querySelector('[data-dbg-order]') && typeof api.debugState === 'function'){
       const hdr = modalEl.querySelector('.modal-header');
       const btn = document.createElement('button');
@@ -198,7 +183,7 @@ async function openAlloc(orderId){
 function renderAllocRows(guests){
   const tbody = q('#tblAllocGuests');
 
-  // Kumpulan yang sudah dipakai di order (in-order locks) — ambil dari nilai awal guest
+  // catat alokasi awal (kalau ada) → hanya untuk label & lock awal
   const usedVeh = new Set();
   const usedDrv = new Set();
   guests.forEach(g => {
@@ -214,15 +199,13 @@ function renderAllocRows(guests){
       const id    = String(v.id ?? v.vehicleId ?? '');
       const name  = v.name || v.nama || '';
       const plate = v.plate || v.nopol || v.noPol || '';
-      const raw   = normStatusRaw(v, 'veh');                 // status mentah
-      const avail = isAvailableByStatus(v, 'veh');           // true = boleh pilih (kecuali busy/used)
-      const busy  = busyVeh.has(id);                         // dari dashboard
+      const raw   = normStatusRaw(v);
+      const avail = isAvailableByStatus(v);
+      const busy  = busyVeh.has(id);
       const used  = usedVeh.has(id) && !(selfUsing && selId===id);
 
-      // final disable
       const disable = (!avail) || busy || used;
 
-      // label status
       let badges = [];
       if (!avail) badges.push(`NA${raw ? `: ${raw.toUpperCase()}` : ''}`);
       if (busy)   badges.push('BUSY');
@@ -245,8 +228,8 @@ function renderAllocRows(guests){
     drivers.forEach(d => {
       const id   = String(d.id ?? d.driverId ?? d.userId ?? '');
       const name = d.name || d.nama || '';
-      const raw  = normStatusRaw(d, 'drv');
-      const avail= isAvailableByStatus(d, 'drv');
+      const raw  = normStatusRaw(d);
+      const avail= isAvailableByStatus(d);
       const busy = busyDrv.has(id);
       const used = usedDrv.has(id) && !(selfUsing && selId===id);
 
@@ -296,10 +279,9 @@ function renderAllocRows(guests){
     </tr>`;
   }).join('');
 
-  // Wire events
+  // Wire events (TIDAK menyentuh server pada perubahan pilihan)
   const tbodyEl = q('#tblAllocGuests');
   tbodyEl.querySelectorAll('[data-veh]').forEach(sel=>{
-    // simpan initial prev
     sel.dataset.prev = sel.value || '';
     sel.addEventListener('change', onVehChange);
   });
@@ -310,7 +292,7 @@ function renderAllocRows(guests){
   tbodyEl.querySelectorAll('[data-approve]').forEach(btn=>btn.addEventListener('click', onApproveGuest));
   tbodyEl.querySelectorAll('[data-del]').forEach(btn=>btn.addEventListener('click', onDeleteGuest));
 
-  // Terapkan in-order lock berdasarkan pilihan awal
+  // Lock awal + validasi tombol approve
   applyInOrderLocks();
   updateApproveAllState();
 }
@@ -344,8 +326,9 @@ function applyInOrderLocks(){
       const baseNA   = opt.dataset.na === '1';
       const baseBusy = opt.dataset.busy === '1';
       const selfUsing = (used.veh.get(id) === idx);
+      const vehObj = vehicles.find(v => String(v.id ?? v.vehicleId ?? '') === id);
       const shouldDisable = baseNA || baseBusy ||
-        isVehDisabledByFlags({ id, vehObj: vehicles.find(v => String(v.id ?? v.vehicleId ?? '') === id), usedInOrder: new Set(used.veh.keys()), selfUsing });
+        isVehDisabledByFlags({ id, vehObj, usedInOrder: new Set(used.veh.keys()), selfUsing });
       opt.disabled = shouldDisable;
       opt.dataset.used = (!baseBusy && !baseNA && shouldDisable && !selfUsing) ? '1' : (opt.dataset.used || '0');
       if (shouldDisable && !selfUsing && opt.selected) { opt.selected = false; }
@@ -358,8 +341,9 @@ function applyInOrderLocks(){
       const baseNA   = opt.dataset.na === '1';
       const baseBusy = opt.dataset.busy === '1';
       const selfUsing = (used.drv.get(id) === idx);
+      const drvObj = drivers.find(d => String(d.id ?? d.driverId ?? d.userId ?? '') === id);
       const shouldDisable = baseNA || baseBusy ||
-        isDrvDisabledByFlags({ id, drvObj: drivers.find(d => String(d.id ?? d.driverId ?? d.userId ?? '') === id), usedInOrder: new Set(used.drv.keys()), selfUsing });
+        isDrvDisabledByFlags({ id, drvObj, usedInOrder: new Set(used.drv.keys()), selfUsing });
       opt.disabled = shouldDisable;
       opt.dataset.used = (!baseBusy && !baseNA && shouldDisable && !selfUsing) ? '1' : (opt.dataset.used || '0');
       if (shouldDisable && !selfUsing && opt.selected) { opt.selected = false; }
@@ -368,16 +352,14 @@ function applyInOrderLocks(){
 }
 
 // ============================
-// Perubahan pilihan per baris (dengan revert jika NA/BUSY/USED)
+// Perubahan pilihan per baris (LOCAL ONLY, no API)
 // ============================
-async function onVehChange(ev){
+function onVehChange(ev){
   const sel = ev.target;
   const tr = sel.closest('tr');
-  const guestNo = +tr.dataset.gn;
-  const vehicleId = sel.value || '';
   const drvSelect = tr.querySelector('[data-drv]');
 
-  // Jika user memilih NA/BUSY/USED → batalkan & revert
+  // pilih NA/BUSY/USED → revert
   const so = sel.selectedOptions[0];
   if (so && (so.dataset.na === '1' || so.dataset.busy === '1' || so.dataset.used === '1')) {
     showNotif('error','Kendaraan tidak tersedia untuk dipilih.');
@@ -385,14 +367,15 @@ async function onVehChange(ev){
     return;
   }
 
-  // Auto set driver default kendaraan kalau kosong & available
+  // auto-set driver default kendaraan (LOCAL) jika available & belum dipakai
+  const vehicleId = sel.value || '';
   if (vehicleId) {
     const veh = vehicles.find(v => String(v.id ?? v.vehicleId ?? '') === String(vehicleId));
     const cand = String(veh?.driverId ?? '');
     if (cand && !drvSelect.value) {
       const drvObj = drivers.find(d => String(d.id ?? d.driverId ?? d.userId ?? '') === cand);
       const candBusy = busyDrv.has(cand);
-      const candNA   = !isAvailableByStatus(drvObj, 'drv');
+      const candNA   = !isAvailableByStatus(drvObj);
       const used = collectCurrentSelections();
       if (!candBusy && !candNA && !used.drv.has(cand)) {
         drvSelect.value = cand;
@@ -400,30 +383,18 @@ async function onVehChange(ev){
     }
   }
 
-  // Sinkron ke server
-  try {
-    await api.allocGuest(currentOrderId, guestNo, vehicleId, drvSelect.value || '');
-    sel.dataset.prev = sel.value || '';
-  } catch (e) {
-    console.error(e);
-    showNotif('error', e.message || 'Gagal menyimpan alokasi');
-    // revert jika gagal
-    sel.value = sel.dataset.prev || '';
-  }
+  // local state
+  sel.dataset.prev = sel.value || '';
 
-  // Re-lock berdasarkan pilihan terbaru
+  // Re-lock & re-validate
   applyInOrderLocks();
   updateApproveAllState();
 }
 
-async function onDrvChange(ev){
+function onDrvChange(ev){
   const sel = ev.target;
-  const tr = sel.closest('tr');
-  const guestNo = +tr.dataset.gn;
-  const vehicleId = tr.querySelector('[data-veh]').value || '';
-  const driverId  = sel.value || '';
 
-  // Jika user memilih NA/BUSY/USED → batalkan & revert
+  // pilih NA/BUSY/USED → revert
   const so = sel.selectedOptions[0];
   if (so && (so.dataset.na === '1' || so.dataset.busy === '1' || so.dataset.used === '1')) {
     showNotif('error','Driver tidak tersedia untuk dipilih.');
@@ -431,15 +402,7 @@ async function onDrvChange(ev){
     return;
   }
 
-  try {
-    await api.allocGuest(currentOrderId, guestNo, vehicleId, driverId);
-    sel.dataset.prev = sel.value || '';
-  } catch (e) {
-    console.error(e);
-    showNotif('error', e.message || 'Gagal menyimpan alokasi');
-    sel.value = sel.dataset.prev || '';
-  }
-
+  sel.dataset.prev = sel.value || '';
   applyInOrderLocks();
   updateApproveAllState();
 }
@@ -471,12 +434,14 @@ async function onApproveGuest(ev){
   if (vehUsed || drvUsed) { showNotif('error','Tidak bisa approve: kendaraan/driver sudah dipakai baris lain'); return; }
 
   try{
+    // ⬇️ BARU: simpan alokasi ke server BARU kemudian approve
+    await api.allocGuest(currentOrderId, guestNo, veh, drv);
     dlog('APPROVE GUEST ->', {orderId:currentOrderId, guestNo, veh, drv});
     await api.approveGuest(currentOrderId, guestNo);
+
     showNotif('success','Tamu disetujui & dikirim ke Driver');
     tr.remove();
 
-    // CCTV snapshot
     if (isDbg() && typeof api.debugState === 'function'){
       try{
         const snap = await api.debugState({ orderId: currentOrderId });
@@ -562,19 +527,18 @@ q('#btnApproveAll').addEventListener('click', async ()=>{
     return;
   }
 
-  // sinkron alokasi terakhir (jaga-jaga)
-  for (const r of pending){
-    const gn  = +r.getAttribute('data-gn');
-    const veh = r.querySelector('[data-veh]').value || '';
-    const drv = r.querySelector('[data-drv]').value || '';
-    await api.allocGuest(currentOrderId, gn, veh, drv);
-  }
-
   try{
+    // ⬇️ BARU: simpan alokasi semua pending baris dahulu
+    for (const r of pending){
+      const gn  = +r.getAttribute('data-gn');
+      const veh = r.querySelector('[data-veh]').value || '';
+      const drv = r.querySelector('[data-drv]').value || '';
+      await api.allocGuest(currentOrderId, gn, veh, drv);
+    }
+
     dlog('APPROVE ALL ->', {orderId:currentOrderId, pending: pending.map(r=>+r.getAttribute('data-gn'))});
     await api.approveAll(currentOrderId);
 
-    // CCTV snapshot
     if (isDbg() && typeof api.debugState === 'function'){
       try{
         const snap = await api.debugState({ orderId: currentOrderId });
