@@ -161,8 +161,9 @@ function renderAllocRows(guests){
   const usedVeh = new Set();
   const usedDrv = new Set();
   guests.forEach(g => {
-    const vId = String(g.vehicleId ?? g.vehicle_id ?? g.allocated_vehicle?.id ?? '' || '');
-    const dId = String(g.driverId  ?? g.driver_id  ?? g.driver?.id ?? '' || '');
+    // FIX: jangan campur ?? dengan || — gunakan ?? sampai selesai
+    const vId = String(g.vehicleId ?? g.vehicle_id ?? (g.allocated_vehicle?.id ?? ''));
+    const dId = String(g.driverId  ?? g.driver_id  ?? (g.driver?.id ?? ''));
     if (vId) usedVeh.add(vId);
     if (dId) usedDrv.add(dId);
   });
@@ -198,8 +199,9 @@ function renderAllocRows(guests){
 
   tbody.innerHTML = guests.map((g,i)=>{
     const gid = g.no || g.guestNo || g.index || g.id;
-    const selVehId = String(g.vehicleId ?? g.vehicle_id ?? g.allocated_vehicle?.id ?? '' || '');
-    const selDrvId = String(g.driverId  ?? g.driver_id  ?? g.driver?.id ?? '' || '');
+    // FIX: jangan campur ?? dengan || — gunakan ?? sampai selesai
+    const selVehId = String(g.vehicleId ?? g.vehicle_id ?? (g.allocated_vehicle?.id ?? ''));
+    const selDrvId = String(g.driverId  ?? g.driver_id  ?? (g.driver?.id ?? ''));
     const ok = g.approved ? 'disabled' : '';
     return `<tr data-gn="${gid}">
       <td>${i+1}</td>
@@ -233,6 +235,7 @@ function renderAllocRows(guests){
   applyInOrderLocks();
   updateApproveAllState();
 }
+
 
 function collectCurrentSelections(){
   const tbody = q('#tblAllocGuests');
