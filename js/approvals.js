@@ -1,4 +1,4 @@
-// approvals.js — REPLACE (tidak mengubah status sampai Approve ditekan)
+// approvals.js — REPLACE (Session-lock setelah Approve; NA/BUSY/USED; no save saat pilih)
 import { q } from './util.js';
 import { showNotif } from './notif.js';
 import { api } from './api.js';
@@ -14,9 +14,15 @@ let vehicles = [];
 let drivers  = [];
 let bsAlloc  = null; // bootstrap.Modal instance untuk #mdlAlloc
 
-// Busy map dari dashboard
+// Busy map dari server (dashboard)
 let busyVeh = new Set();
 let busyDrv = new Set();
+
+// Session locks (tambah setelah APPROVE sukses; efek langsung tanpa reload/login)
+const sessionLockVeh = new Set();
+const sessionLockDrv = new Set();
+const unionBusyVeh = () => new Set([...busyVeh, ...sessionLockVeh]);
+const unionBusyDrv = () => new Set([...busyDrv, ...sessionLockDrv]);
 
 // ============================
 // Helpers: status
@@ -24,29 +30,28 @@ let busyDrv = new Set();
 const safe  = (s)=> (s==null ? '' : String(s));
 const lower = (s)=> safe(s).toLowerCase();
 
-// Status yang dianggap TERSEDIA
+// Status TERSEDIA
 const AVAILABLE_TAGS = [
   'available','ready','free','idle','tersedia','siap',
-  'aktif','active','on duty','on-duty','standby','online',
-  'ready for use'
+  'aktif','active','on duty','on-duty','standby','online','ready for use'
 ];
 
-// Status yang jelas BUSY
+// Status BUSY jelas
 const BUSY_TAGS = [
   'allocated','on trip','in transit','departed','busy','occupied','assigned','driving','inactive'
 ];
 
 function normStatusRaw(obj){
-  let raw = obj?.status ?? obj?.state ?? obj?.availability ?? '';
-  if (obj?.available === false) raw = raw || 'unavailable';
-  if (obj?.active === false)    raw = raw || 'inactive';
+  let raw = (obj && (obj.status ?? obj.state ?? obj.availability)) ?? '';
+  if (obj && obj.available === false) raw = raw || 'unavailable';
+  if (obj && obj.active === false)    raw = raw || 'inactive';
   return lower(raw);
 }
 function isAvailableByStatus(obj){
   const raw = normStatusRaw(obj);
   if (!raw) {
-    if (obj?.available === false || obj?.active === false) return false;
-    return true;
+    if (obj && (obj.available === false || obj.active === false)) return false;
+    return true; // tanpa status eksplisit → anggap available
   }
   return AVAILABLE_TAGS.includes(raw);
 }
@@ -74,18 +79,18 @@ function buildBusyMapFromDashboard(dash) {
   }
 }
 
-// disabled jika NA, BUSY, atau sudah dipakai baris lain (selain barisnya sendiri)
+// disabled jika NA, BUSY (server ∪ session), atau sudah dipakai baris lain (selain barisnya sendiri)
 function isVehDisabledByFlags({ id, vehObj, usedInOrder, selfUsing }) {
   if (!id) return false;
   const na   = !isAvailableByStatus(vehObj);
-  const busy = busyVeh.has(String(id));
+  const busy = unionBusyVeh().has(String(id));
   const used = usedInOrder.has(String(id)) && !selfUsing;
   return na || busy || used;
 }
 function isDrvDisabledByFlags({ id, drvObj, usedInOrder, selfUsing }) {
   if (!id) return false;
   const na   = !isAvailableByStatus(drvObj);
-  const busy = busyDrv.has(String(id));
+  const busy = unionBusyDrv().has(String(id));
   const used = usedInOrder.has(String(id)) && !selfUsing;
   return na || busy || used;
 }
@@ -136,7 +141,7 @@ async function refresh(){
 }
 
 // ============================
-// Modal Alokasi (proteksi NA/BUSY/USED; TANPA menyimpan saat pilih dropdown)
+// Modal Alokasi (proteksi NA/BUSY/USED; TIDAK save saat pilih dropdown)
 // ============================
 async function openAlloc(orderId){
   currentOrderId = orderId;
@@ -153,7 +158,8 @@ async function openAlloc(orderId){
     ]);
     vehicles = ve || [];
     drivers  = dr || [];
-    buildBusyMapFromDashboard(dash);
+    buildBusyMapFromDashboard(dash); // server busy
+    // union dengan sessionLock akan dipakai saat render/applyLock
 
     q('#allocOrderInfo').textContent = `Order ${orderId} • ${g.info||''}`;
     renderAllocRows(g.guests||[]);
@@ -183,25 +189,26 @@ async function openAlloc(orderId){
 function renderAllocRows(guests){
   const tbody = q('#tblAllocGuests');
 
-  // catat alokasi awal (kalau ada) → hanya untuk label & lock awal
+  // catat alokasi awal (untuk label & lock dalam-order)
   const usedVeh = new Set();
   const usedDrv = new Set();
   guests.forEach(g => {
-    const vId = String(g.vehicleId ?? g.vehicle_id ?? (g.allocated_vehicle?.id ?? ''));
-    const dId = String(g.driverId  ?? g.driver_id  ?? (g.driver?.id ?? ''));
+    const vId = String((g.vehicleId ?? g.vehicle_id) ?? ((g.allocated_vehicle && g.allocated_vehicle.id) ?? ''));
+    const dId = String((g.driverId  ?? g.driver_id ) ?? ((g.driver            && g.driver.id           ) ?? ''));
     if (vId) usedVeh.add(vId);
     if (dId) usedDrv.add(dId);
   });
 
   const vehOptionsHTML = (selId, selfUsing) => {
     const opts = ['<option value="">Pilih…</option>'];
+    const busyUnion = unionBusyVeh();
     vehicles.forEach(v => {
-      const id    = String(v.id ?? v.vehicleId ?? '');
+      const id    = String((v.id ?? v.vehicleId) ?? '');
       const name  = v.name || v.nama || '';
       const plate = v.plate || v.nopol || v.noPol || '';
       const raw   = normStatusRaw(v);
       const avail = isAvailableByStatus(v);
-      const busy  = busyVeh.has(id);
+      const busy  = busyUnion.has(id);                 // ⬅️ server ∪ session
       const used  = usedVeh.has(id) && !(selfUsing && selId===id);
 
       const disable = (!avail) || busy || used;
@@ -225,12 +232,13 @@ function renderAllocRows(guests){
 
   const drvOptionsHTML = (selId, selfUsing) => {
     const opts = ['<option value="">Pilih…</option>'];
+    const busyUnion = unionBusyDrv();
     drivers.forEach(d => {
-      const id   = String(d.id ?? d.driverId ?? d.userId ?? '');
+      const id   = String((d.id ?? d.driverId ?? d.userId) ?? '');
       const name = d.name || d.nama || '';
       const raw  = normStatusRaw(d);
       const avail= isAvailableByStatus(d);
-      const busy = busyDrv.has(id);
+      const busy = busyUnion.has(id);                  // ⬅️ server ∪ session
       const used = usedDrv.has(id) && !(selfUsing && selId===id);
 
       const disable = (!avail) || busy || used;
@@ -253,9 +261,9 @@ function renderAllocRows(guests){
   };
 
   tbody.innerHTML = guests.map((g,i)=>{
-    const gid = g.no || g.guestNo || g.index || g.id;
-    const selVehId = String(g.vehicleId ?? g.vehicle_id ?? (g.allocated_vehicle?.id ?? ''));
-    const selDrvId = String(g.driverId  ?? g.driver_id  ?? (g.driver?.id ?? ''));
+    const gid = (g.no || g.guestNo || g.index || g.id);
+    const selVehId = String((g.vehicleId ?? g.vehicle_id) ?? ((g.allocated_vehicle && g.allocated_vehicle.id) ?? ''));
+    const selDrvId = String((g.driverId  ?? g.driver_id ) ?? ((g.driver            && g.driver.id           ) ?? ''));
     const ok = g.approved ? 'disabled' : '';
     return `<tr data-gn="${gid}">
       <td>${i+1}</td>
@@ -279,7 +287,7 @@ function renderAllocRows(guests){
     </tr>`;
   }).join('');
 
-  // Wire events (TIDAK menyentuh server pada perubahan pilihan)
+  // Wire events (LOCAL ONLY)
   const tbodyEl = q('#tblAllocGuests');
   tbodyEl.querySelectorAll('[data-veh]').forEach(sel=>{
     sel.dataset.prev = sel.value || '';
@@ -317,6 +325,8 @@ function applyInOrderLocks(){
   const tbody = q('#tblAllocGuests');
   const rows = Array.from(tbody.querySelectorAll('tr'));
   const used = collectCurrentSelections();
+  const busyUVeh = unionBusyVeh();
+  const busyUDrv = unionBusyDrv();
 
   rows.forEach((tr, idx) => {
     // Kendaraan options
@@ -324,9 +334,9 @@ function applyInOrderLocks(){
       const id = opt.value;
       if (!id) { opt.disabled = false; opt.dataset.used = '0'; return; }
       const baseNA   = opt.dataset.na === '1';
-      const baseBusy = opt.dataset.busy === '1';
+      const baseBusy = (opt.dataset.busy === '1') || busyUVeh.has(id); // tambahkan session lock
       const selfUsing = (used.veh.get(id) === idx);
-      const vehObj = vehicles.find(v => String(v.id ?? v.vehicleId ?? '') === id);
+      const vehObj = vehicles.find(v => String((v.id ?? v.vehicleId) ?? '') === id);
       const shouldDisable = baseNA || baseBusy ||
         isVehDisabledByFlags({ id, vehObj, usedInOrder: new Set(used.veh.keys()), selfUsing });
       opt.disabled = shouldDisable;
@@ -339,9 +349,9 @@ function applyInOrderLocks(){
       const id = opt.value;
       if (!id) { opt.disabled = false; opt.dataset.used = '0'; return; }
       const baseNA   = opt.dataset.na === '1';
-      const baseBusy = opt.dataset.busy === '1';
+      const baseBusy = (opt.dataset.busy === '1') || busyUDrv.has(id); // tambahkan session lock
       const selfUsing = (used.drv.get(id) === idx);
-      const drvObj = drivers.find(d => String(d.id ?? d.driverId ?? d.userId ?? '') === id);
+      const drvObj = drivers.find(d => String((d.id ?? d.driverId ?? d.userId) ?? '') === id);
       const shouldDisable = baseNA || baseBusy ||
         isDrvDisabledByFlags({ id, drvObj, usedInOrder: new Set(used.drv.keys()), selfUsing });
       opt.disabled = shouldDisable;
@@ -370,11 +380,11 @@ function onVehChange(ev){
   // auto-set driver default kendaraan (LOCAL) jika available & belum dipakai
   const vehicleId = sel.value || '';
   if (vehicleId) {
-    const veh = vehicles.find(v => String(v.id ?? v.vehicleId ?? '') === String(vehicleId));
-    const cand = String(veh?.driverId ?? '');
+    const veh = vehicles.find(v => String((v.id ?? v.vehicleId) ?? '') === String(vehicleId));
+    const cand = String((veh && veh.driverId) ? veh.driverId : '');
     if (cand && !drvSelect.value) {
-      const drvObj = drivers.find(d => String(d.id ?? d.driverId ?? d.userId ?? '') === cand);
-      const candBusy = busyDrv.has(cand);
+      const drvObj = drivers.find(d => String((d.id ?? d.driverId ?? d.userId) ?? '') === cand);
+      const candBusy = unionBusyDrv().has(cand);
       const candNA   = !isAvailableByStatus(drvObj);
       const used = collectCurrentSelections();
       if (!candBusy && !candNA && !used.drv.has(cand)) {
@@ -421,12 +431,12 @@ async function onApproveGuest(ev){
   const vopt = selVeh.selectedOptions[0];
   const dopt = selDrv.selectedOptions[0];
 
-  const vehNA  = vopt?.dataset?.na === '1';
-  const drvNA  = dopt?.dataset?.na === '1';
-  const vehBusy= vopt?.dataset?.busy === '1';
-  const drvBusy= dopt?.dataset?.busy === '1';
-  const vehUsed= vopt?.dataset?.used === '1';
-  const drvUsed= dopt?.dataset?.used === '1';
+  const vehNA  = vopt && vopt.dataset && vopt.dataset.na === '1';
+  const drvNA  = dopt && dopt.dataset && dopt.dataset.na === '1';
+  const vehBusy= vopt && vopt.dataset && vopt.dataset.busy === '1';
+  const drvBusy= dopt && dopt.dataset && dopt.dataset.busy === '1';
+  const vehUsed= vopt && vopt.dataset && vopt.dataset.used === '1';
+  const drvUsed= dopt && dopt.dataset && dopt.dataset.used === '1';
 
   if (!veh || !drv) { showNotif('error','Kendaraan & driver wajib dialokasikan'); return; }
   if (vehNA || drvNA) { showNotif('error','Tidak bisa approve: kendaraan/driver tidak tersedia'); return; }
@@ -434,25 +444,39 @@ async function onApproveGuest(ev){
   if (vehUsed || drvUsed) { showNotif('error','Tidak bisa approve: kendaraan/driver sudah dipakai baris lain'); return; }
 
   try{
-    // ⬇️ BARU: simpan alokasi ke server BARU kemudian approve
+    // 1) simpan alokasi ke server
     await api.allocGuest(currentOrderId, guestNo, veh, drv);
+    // 2) approve
     dlog('APPROVE GUEST ->', {orderId:currentOrderId, guestNo, veh, drv});
     await api.approveGuest(currentOrderId, guestNo);
 
+    // 3) sesi ini: kunci kendaraan & driver biar tidak bisa dipilih order lain
+    sessionLockVeh.add(String(veh));
+    sessionLockDrv.add(String(drv));
+
+    // 4) optional: refresh dashboard busy agar sinkron server
+    try {
+      const dash = await api.dashboard();
+      buildBusyMapFromDashboard(dash);
+    } catch(_) {}
+
     showNotif('success','Tamu disetujui & dikirim ke Driver');
     tr.remove();
+
+    // re-lock sisa baris di modal ini
+    applyInOrderLocks();
+    updateApproveAllState();
+
+    // broadcast (opsional) untuk modul lain
+    window.dispatchEvent(new CustomEvent('fleet-allocated', {
+      detail: { vehIds:[String(veh)], drvIds:[String(drv)], by:'approve-single', orderId: currentOrderId }
+    }));
 
     if (isDbg() && typeof api.debugState === 'function'){
       try{
         const snap = await api.debugState({ orderId: currentOrderId });
         console.log('[CCTV] POST-APPROVE SNAPSHOT');
         console.log(snap);
-        if (snap.guestsDiag && snap.guestsDiag.length){
-          console.table(snap.guestsDiag.map(g => ({
-            guestNo: g.guestNo, nama: g.nama, driverId: g.driverId, driverName: g.driverName,
-            approved: g.approved, okForTask: g.okForTask, reasons: g.reasons
-          })));
-        }
       }catch(_){}
     }
 
@@ -491,12 +515,12 @@ function updateApproveAllState(){
     const dSel = r.querySelector('[data-drv]');
     const v    = vSel.value;
     const d    = dSel.value;
-    const vNA  = vSel.selectedOptions[0]?.dataset?.na   === '1';
-    const dNA  = dSel.selectedOptions[0]?.dataset?.na   === '1';
-    const vBusy= vSel.selectedOptions[0]?.dataset?.busy === '1';
-    const dBusy= dSel.selectedOptions[0]?.dataset?.busy === '1';
-    const vUsed= vSel.selectedOptions[0]?.dataset?.used === '1';
-    const dUsed= dSel.selectedOptions[0]?.dataset?.used === '1';
+    const vNA  = vSel.selectedOptions[0] && vSel.selectedOptions[0].dataset && vSel.selectedOptions[0].dataset.na   === '1';
+    const dNA  = dSel.selectedOptions[0] && dSel.selectedOptions[0].dataset && dSel.selectedOptions[0].dataset.na   === '1';
+    const vBusy= vSel.selectedOptions[0] && vSel.selectedOptions[0].dataset && vSel.selectedOptions[0].dataset.busy === '1';
+    const dBusy= dSel.selectedOptions[0] && dSel.selectedOptions[0].dataset && dSel.selectedOptions[0].dataset.busy === '1';
+    const vUsed= vSel.selectedOptions[0] && vSel.selectedOptions[0].dataset && vSel.selectedOptions[0].dataset.used === '1';
+    const dUsed= dSel.selectedOptions[0] && dSel.selectedOptions[0].dataset && dSel.selectedOptions[0].dataset.used === '1';
     return !(v && d) || vNA || dNA || vBusy || dBusy || vUsed || dUsed;
   });
   q('#btnApproveAll').disabled = invalid;
@@ -514,12 +538,12 @@ q('#btnApproveAll').addEventListener('click', async ()=>{
     const dSel = r.querySelector('[data-drv]');
     const v    = vSel.value;
     const d    = dSel.value;
-    const vNA  = vSel.selectedOptions[0]?.dataset?.na   === '1';
-    const dNA  = dSel.selectedOptions[0]?.dataset?.na   === '1';
-    const vBusy= vSel.selectedOptions[0]?.dataset?.busy === '1';
-    const dBusy= dSel.selectedOptions[0]?.dataset?.busy === '1';
-    const vUsed= vSel.selectedOptions[0]?.dataset?.used === '1';
-    const dUsed= dSel.selectedOptions[0]?.dataset?.used === '1';
+    const vNA  = vSel.selectedOptions[0] && vSel.selectedOptions[0].dataset && vSel.selectedOptions[0].dataset.na   === '1';
+    const dNA  = dSel.selectedOptions[0] && dSel.selectedOptions[0].dataset && dSel.selectedOptions[0].dataset.na   === '1';
+    const vBusy= vSel.selectedOptions[0] && vSel.selectedOptions[0].dataset && vSel.selectedOptions[0].dataset.busy === '1';
+    const dBusy= dSel.selectedOptions[0] && dSel.selectedOptions[0].dataset && dSel.selectedOptions[0].dataset.busy === '1';
+    const vUsed= vSel.selectedOptions[0] && vSel.selectedOptions[0].dataset && vSel.selectedOptions[0].dataset.used === '1';
+    const dUsed= dSel.selectedOptions[0] && dSel.selectedOptions[0].dataset && dSel.selectedOptions[0].dataset.used === '1';
     return !(v && d) || vNA || dNA || vBusy || dBusy || vUsed || dUsed;
   });
   if (hasInvalid){
@@ -528,33 +552,39 @@ q('#btnApproveAll').addEventListener('click', async ()=>{
   }
 
   try{
-    // ⬇️ BARU: simpan alokasi semua pending baris dahulu
+    // 1) simpan alokasi semua pending baris dahulu
+    const vehLocked = [];
+    const drvLocked = [];
     for (const r of pending){
       const gn  = +r.getAttribute('data-gn');
       const veh = r.querySelector('[data-veh]').value || '';
       const drv = r.querySelector('[data-drv]').value || '';
       await api.allocGuest(currentOrderId, gn, veh, drv);
+      vehLocked.push(String(veh));
+      drvLocked.push(String(drv));
     }
 
+    // 2) approve all
     dlog('APPROVE ALL ->', {orderId:currentOrderId, pending: pending.map(r=>+r.getAttribute('data-gn'))});
     await api.approveAll(currentOrderId);
 
-    if (isDbg() && typeof api.debugState === 'function'){
-      try{
-        const snap = await api.debugState({ orderId: currentOrderId });
-        console.log('[CCTV] POST-APPROVE-ALL SNAPSHOT');
-        console.log(snap);
-        if (snap.guestsDiag && snap.guestsDiag.length){
-          console.table(snap.guestsDiag.map(g => ({
-            guestNo: g.guestNo, nama: g.nama, driverId: g.driverId, driverName: g.driverName,
-            approved: g.approved, okForTask: g.okForTask, reasons: g.reasons
-          })));
-        }
-      }catch(_){}
-    }
+    // 3) kunci di sesi ini agar langsung nonaktif di order lain
+    vehLocked.forEach(id => sessionLockVeh.add(id));
+    drvLocked.forEach(id => sessionLockDrv.add(id));
+
+    // 4) refresh dashboard busy agar sinkron server
+    try {
+      const dash = await api.dashboard();
+      buildBusyMapFromDashboard(dash);
+    } catch(_) {}
 
     showNotif('success','Semua tamu disetujui & dikirim ke Driver');
     bsAlloc?.hide();
+
+    // broadcast (opsional)
+    window.dispatchEvent(new CustomEvent('fleet-allocated', {
+      detail: { vehIds: vehLocked, drvIds: drvLocked, by:'approve-all', orderId: currentOrderId }
+    }));
 
     // hapus baris order dari daftar
     const listTbody = q('#tblApprovals');
@@ -606,6 +636,10 @@ function askReason(cb){
 window.addEventListener('DOMContentLoaded', ()=>{
   q('#btnReloadApprovals')?.addEventListener('click', refresh);
 });
+
+// Opsional: modul lain bisa mendengarkan event ini untuk refresh UI
+// window.addEventListener('fleet-allocated', (e)=> console.log('Fleet allocated:', e.detail));
+
 window.addEventListener('route', e=>{
   if (e.detail.page === 'approvals') refresh();
 });
