@@ -1,4 +1,7 @@
-// order.js (rapih & tanpa bentrok)
+// order.js (rapih & terstruktur)
+// ===================================================================
+// Impor utilitas & API
+// ===================================================================
 import { q, qa, debounce, fmtLong } from './util.js';
 import { showNotif } from './notif.js';
 import { getIdent, setIdent, addWilayah, getWilayah, takePreselectVehicle } from './store.js';
@@ -7,25 +10,201 @@ import { api } from './api.js';
 import { auth } from './auth.js';
 
 const guestMax = 200; // batas upload
+const ORDER_IDENT_CACHE = 'ORDER_IDENT_V1'; // cache per-perangkat {nama,unit,jabatan}
 
-/* ========== IDENTITAS ========== */
-function renderIdent(){
-  const ident = getIdent();
-  q('#ordNama').value = ident.nama || '';
-  q('#ordUnit').value = ident.unit || '';
-  q('#ordJabatan').value = ident.jabatan || '';
-}
-function persistIdent(){
-  setIdent({
-    nama: q('#ordNama').value.trim(),
-    unit: q('#ordUnit').value.trim(),
-    jabatan: q('#ordJabatan').value.trim()
-  });
-}
+// ===================================================================
+// Identitas Pemesan (Nama, Unit, Jabatan) — Controller UX
+// ===================================================================
+const IdentUX = (() => {
+  let wired = false;
+  let $page, $nama, $unit, $jab, $submit, $logout, $btnEdit, unitWrap, jabWrap;
+  let initialNama = '';
 
-/* ========== AUTO-SUGGEST WILAYAH (tanpa bentrok) ========== */
+  // ---------- helpers ----------
+  const toastErr = (m) => (typeof window.toastError === 'function' ? window.toastError(m) : showNotif('error', m));
+  const readCache = () => { try { return JSON.parse(localStorage.getItem(ORDER_IDENT_CACHE) || 'null') || {}; } catch { return {}; } };
+  const writeCache = (obj) => { try {
+    localStorage.setItem(ORDER_IDENT_CACHE, JSON.stringify({
+      nama: (obj.nama||'').trim(), unit: (obj.unit||'').trim(), jabatan: (obj.jabatan||'').trim()
+    }));
+  } catch {} };
+  const clearCache = () => { try { localStorage.removeItem(ORDER_IDENT_CACHE); } catch {} };
+
+  const ensureInvalidFeedback = (inputEl, msg='Wajib diisi') => {
+    let fb = inputEl.nextElementSibling;
+    if (!fb || !fb.classList?.contains('invalid-feedback')) {
+      fb = document.createElement('div');
+      fb.className = 'invalid-feedback d-block';
+      inputEl.insertAdjacentElement('afterend', fb);
+    }
+    fb.textContent = msg;
+    return fb;
+  };
+  const setInvalid = (inputEl, on, msg) => {
+    if (!inputEl) return;
+    if (on) {
+      inputEl.classList.add('is-invalid');
+      ensureInvalidFeedback(inputEl, msg);
+    } else {
+      inputEl.classList.remove('is-invalid');
+      const fb = inputEl.nextElementSibling;
+      if (fb && fb.classList?.contains('invalid-feedback')) fb.textContent = '';
+    }
+  };
+
+  const hideUJ = () => {
+    unitWrap?.classList.add('d-none');
+    jabWrap?.classList.add('d-none');
+    $btnEdit?.classList.remove('d-none');
+  };
+  const showUJ = () => {
+    unitWrap?.classList.remove('d-none');
+    jabWrap?.classList.remove('d-none');
+    $btnEdit?.classList.add('d-none'); // tombol hilang ketika field ditampilkan
+  };
+
+  // ---------- public methods ----------
+  function mount() {
+    if (wired) return;
+
+    $page   = document.querySelector('section[data-page="order"]');
+    if (!$page) return;
+    $nama   = q('#ordNama');
+    $unit   = q('#ordUnit');
+    $jab    = q('#ordJabatan');
+    $submit = q('#btnSubmitOrder');
+    $logout = q('#btnLogout');
+
+    if (!$nama || !$unit || !$jab || !$submit) return;
+
+    unitWrap = $unit.closest('.col-md-4') || $unit.parentElement;
+    jabWrap  = $jab.closest('.col-md-4')  || $jab.parentElement;
+
+    // — Prefill dari Settings (store) + cache per perangkat
+    const ident = getIdent() || {};
+    const cache = readCache();
+    $nama.value = (cache.nama ?? ident.nama ?? '') || '';
+    $unit.value = (cache.unit ?? ident.unit ?? '') || '';
+    $jab.value  = (cache.jabatan ?? ident.jabatan ?? '') || '';
+    initialNama = ($nama.value || '').trim();
+
+    // — Button "Ubah Unit & Jabatan"
+    $btnEdit = document.getElementById('btnEditIdent');
+    if (!$btnEdit) {
+      $btnEdit = document.createElement('button');
+      $btnEdit.id = 'btnEditIdent';
+      $btnEdit.type = 'button';
+      $btnEdit.className = 'btn btn-link btn-sm ps-0';
+      $btnEdit.textContent = 'Ubah Unit & Jabatan';
+      $nama.insertAdjacentElement('afterend', $btnEdit);
+    }
+
+    // — Default: sembunyikan U&J (akan tampil hanya bila user butuh mengubah)
+    hideUJ();
+
+    // — Event: tombol manual tampilkan U&J
+    $btnEdit.addEventListener('click', showUJ);
+
+    // — Event: bila Nama berubah dari nilai awal → tampilkan U&J
+    $nama.addEventListener('input', () => {
+      const curr = ($nama.value || '').trim();
+      if (curr !== initialNama) showUJ();
+      writeCache({ nama: curr, unit: $unit.value, jabatan: $jab.value });
+    });
+
+    // — Validasi real-time + simpan cache
+    const validateAndSave = debounce(() => {
+      const u = ($unit.value || '').trim();
+      const j = ($jab.value  || '').trim();
+      setInvalid($unit, !u, 'Unit wajib diisi');
+      setInvalid($jab,  !j,  'Jabatan wajib diisi');
+      writeCache({ nama: ($nama.value||'').trim(), unit: u, jabatan: j });
+    }, 160);
+    $unit.addEventListener('input', validateAndSave);
+    $jab.addEventListener('input',  validateAndSave);
+
+    // — Blok submit bila U&J kosong (pakai capture agar menang awal)
+    $submit.addEventListener('click', (ev) => {
+      const u = ($unit.value || '').trim();
+      const j = ($jab.value  || '').trim();
+      if (!u || !j) {
+        showUJ();
+        setInvalid($unit, !u, 'Unit wajib diisi');
+        setInvalid($jab,  !j,  'Jabatan wajib diisi');
+        toastErr('Lengkapi Unit dan Jabatan terlebih dahulu.');
+        (!u ? $unit : $jab).focus();
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+      }
+    }, true);
+
+    // — Reset cache saat Logout
+    if ($logout) {
+      $logout.addEventListener('click', () => { clearCache(); }, true);
+    }
+
+    // — Auto-sync setelah “Simpan” di Settings
+    document.addEventListener('click', (ev) => {
+      if (ev.target.closest('#btnSaveIdent')) {
+        // beri kesempatan handler Settings menulis ke store
+        setTimeout(() => {
+          const next = getIdent() || {};
+          // perbarui cache & field, tetap hormati UX default (sembunyikan U&J)
+          writeCache({ nama: next.nama||'', unit: next.unit||'', jabatan: next.jabatan||'' });
+          if (!$page.classList.contains('d-none')) {
+            // jangan ganggu jika user sedang mengetik di salah satu field
+            if (!document.activeElement || ![$nama,$unit,$jab].includes(document.activeElement)) {
+              $nama.value = next.nama || '';
+              $unit.value = next.unit || '';
+              $jab.value  = next.jabatan || '';
+              initialNama = ($nama.value || '').trim();
+              hideUJ();
+              setInvalid($unit, false);
+              setInvalid($jab,  false);
+            }
+          }
+        }, 0);
+      }
+    }, true);
+
+    // — Sync antar-tab/jendela
+    window.addEventListener('storage', (ev) => {
+      if (ev.key !== ORDER_IDENT_CACHE) return;
+      try {
+        const next = JSON.parse(ev.newValue || 'null') || {};
+        if (!document.activeElement || ![$nama,$unit,$jab].includes(document.activeElement)) {
+          if (typeof next.nama === 'string')    $nama.value = next.nama;
+          if (typeof next.unit === 'string')    $unit.value = next.unit;
+          if (typeof next.jabatan === 'string') $jab.value  = next.jabatan;
+          hideUJ();
+          setInvalid($unit, false);
+          setInvalid($jab,  false);
+        }
+      } catch {}
+    });
+
+    wired = true;
+  }
+
+  // dipanggil sebelum submit agar Settings juga ikut terbarui
+  function persistToSettingsStore() {
+    // gabungkan cache & field -> tulis via setIdent (source of truth)
+    const obj = {
+      nama: ($nama?.value || '').trim(),
+      unit: ($unit?.value || '').trim(),
+      jabatan: ($jab?.value || '').trim(),
+    };
+    setIdent(obj);
+    writeCache(obj);
+  }
+
+  return { mount, persistToSettingsStore, showUJ, hideUJ };
+})();
+
+// ===================================================================
+// Auto-suggest Wilayah
+// ===================================================================
 function suggestSetup(inputEl, listEl){
-  // Matikan autofill/auto-correct native agar dropdown kita yang dipakai
   inputEl.setAttribute('autocomplete','off');
   inputEl.setAttribute('autocorrect','off');
   inputEl.setAttribute('autocapitalize','off');
@@ -36,27 +215,16 @@ function suggestSetup(inputEl, listEl){
     if (key.length < 1){
       listEl.classList.add('d-none'); listEl.innerHTML = ''; return;
     }
-    const items = getWilayah()
-      .filter(w => w.toLowerCase().includes(key))
-      .slice(0, 20);
-
-    if (!items.length){
-      listEl.classList.add('d-none'); listEl.innerHTML = ''; return;
-    }
-    listEl.innerHTML = items
-      .map(w => `<div class="suggest-item" data-val="${w.replace(/"/g,'&quot;')}">${w}</div>`)
-      .join('');
+    const items = getWilayah().filter(w => w.toLowerCase().includes(key)).slice(0, 20);
+    if (!items.length){ listEl.classList.add('d-none'); listEl.innerHTML = ''; return; }
+    listEl.innerHTML = items.map(w => `<div class="suggest-item" data-val="${w.replace(/"/g,'&quot;')}">${w}</div>`).join('');
     listEl.classList.remove('d-none');
   };
 
-  // Event: ketik & fokus → tampilkan saran (dengan debounce agar ringan)
   inputEl.addEventListener('input', debounce(renderList, 80));
   inputEl.addEventListener('focus', renderList);
-
-  // Tutup sedikit setelah blur supaya pemilihan via pointerdown sempat jalan
   inputEl.addEventListener('blur', ()=> setTimeout(()=> listEl.classList.add('d-none'), 150));
 
-  // Pilih item: pakai pointerdown (lebih cepat dari blur) + fallback click
   const choose = (ev)=>{
     const it = ev.target.closest('.suggest-item');
     if(!it) return;
@@ -64,7 +232,6 @@ function suggestSetup(inputEl, listEl){
     const val = it.getAttribute('data-val');
     inputEl.value = val;
     listEl.classList.add('d-none');
-    // Trigger change agar listener lain (jika ada) bisa merespons
     inputEl.dispatchEvent(new Event('change'));
     inputEl.focus();
   };
@@ -72,18 +239,24 @@ function suggestSetup(inputEl, listEl){
   listEl.addEventListener('click', choose);
 }
 
-/* ========== SWAP DARI↔KE ========== */
+// ===================================================================
+// Swap Dari ↔ Ke
+// ===================================================================
 function swapFromTo(){
   const a = q('#ordFrom').value; const b = q('#ordTo').value;
   q('#ordFrom').value = b; q('#ordTo').value = a;
 }
 
-/* ========== TANGGAL/JAM ========== */
+// ===================================================================
+// Tanggal/Jam
+// ===================================================================
 let depISO = '', retISO = '';
 function setDep(iso){ depISO = iso; q('#ordBerangkatLabel').value = fmtLong(iso); }
 function setRet(iso){ retISO = iso; q('#ordPulangLabel').value   = fmtLong(iso); }
 
-/* ========== TAMU ========== */
+// ===================================================================
+// Tamu
+// ===================================================================
 function renderGuests(n){
   const wrap = q('#guestList'); wrap.innerHTML = '';
   for(let i=1;i<=n;i++){
@@ -126,7 +299,9 @@ function readGuests(){
   return items;
 }
 
-/* ========== TEMPLATE & UPLOAD TAMU ========== */
+// ===================================================================
+// Template & Upload Tamu
+// ===================================================================
 function downloadGuestTemplate(){
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([['Nama','Unit','Jabatan','Gender (L/P)']]);
@@ -170,7 +345,9 @@ function handleGuestUpload(file){
   reader.readAsBinaryString(file);
 }
 
-/* ========== SUBMIT ORDER ========== */
+// ===================================================================
+// Submit Order
+// ===================================================================
 async function submitOrder(){
   // validasi dasar
   const nama = q('#ordNama').value.trim();
@@ -185,8 +362,9 @@ async function submitOrder(){
   if(guests.length === 0){ showNotif('error','Jumlah tamu minimal 1'); return; }
   if(guests.some(g=>!g.nama)){ showNotif('error','Nama tiap tamu wajib diisi'); return; }
 
-  // persist identitas & wilayah populer
-  persistIdent(); addWilayah(from); addWilayah(to);
+  // persist identitas (ke Settings store & cache perangkat) + wilayah populer
+  IdentUX.persistToSettingsStore();
+  addWilayah(from); addWilayah(to);
 
   // preselect kendaraan jika ada
   const preVeh = takePreselectVehicle() || '';
@@ -219,102 +397,14 @@ async function submitOrder(){
   }
 }
 
-// [ADD] UX Identitas Pemesan (Nama, Unit, Jabatan)
-// Sembunyikan Unit & Jabatan secara default, tampilkan otomatis bila Nama diubah
-// dan paksa pengisian saat Kirim Order jika kosong.
-(function () {
-  let _wired = false;
-
-  function toastErr(msg) {
-    if (typeof window.toastError === 'function') window.toastError(msg);
-    else alert(msg);
-  }
-
-  function setupOrderIdentityUX() {
-    const $page = document.querySelector('section[data-page="order"]');
-    if (!$page) return;
-
-    const nama = document.getElementById('ordNama');
-    const unit = document.getElementById('ordUnit');
-    const jab  = document.getElementById('ordJabatan');
-    const submitBtn = document.getElementById('btnSubmitOrder');
-
-    if (!nama || !unit || !jab || !submitBtn) return;
-
-    const unitWrap = unit.closest('.col-md-4') || unit.parentElement;
-    const jabWrap  = jab.closest('.col-md-4')  || jab.parentElement;
-
-    const hideUJ = () => {
-      unitWrap?.classList.add('d-none');
-      jabWrap?.classList.add('d-none');
-    };
-    const showUJ = () => {
-      unitWrap?.classList.remove('d-none');
-      jabWrap?.classList.remove('d-none');
-    };
-
-    // 1) Default: sembunyikan Unit & Jabatan
-    hideUJ();
-
-    // 2) Tambahkan tombol kecil "Ubah Unit & Jabatan" di bawah input Nama
-    if (!document.getElementById('btnEditIdent')) {
-      const btn = document.createElement('button');
-      btn.id = 'btnEditIdent';
-      btn.type = 'button';
-      btn.className = 'btn btn-link btn-sm ps-0';
-      btn.textContent = 'Ubah Unit & Jabatan';
-      // letakkan tepat setelah input Nama
-      nama.insertAdjacentElement('afterend', btn);
-      btn.addEventListener('click', showUJ);
-    }
-
-    // 3) Jika Nama diubah dari nilai awal → tampilkan Unit & Jabatan
-    const initialNama = (nama.value || '').trim();
-    nama.addEventListener('input', () => {
-      const curr = (nama.value || '').trim();
-      if (curr !== initialNama) showUJ();
-    });
-
-    // 4) Validasi sebelum submit:
-    //    - Jika Unit/Jabatan kosong → tampilkan field, tampilkan pesan, batalkan submit.
-    //    - Pakai capture=true agar handler ini berjalan lebih dulu dari handler lain.
-    submitBtn.addEventListener('click', (ev) => {
-      const u = (unit.value || '').trim();
-      const j = (jab.value  || '').trim();
-      if (!u || !j) {
-        showUJ();
-        toastErr('Lengkapi Unit dan Jabatan terlebih dahulu.');
-        // fokuskan ke field yang kosong
-        (!u ? unit : jab).focus();
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-      }
-    }, true);
-  }
-
-  // Jalankan saat pertama kali halaman "order" ditampilkan,
-  // plus fallback DOMContentLoaded bila routing tidak memicu event.
-  window.addEventListener('route', (ev) => {
-    if (ev?.detail?.page === 'order' && !_wired) {
-      _wired = true;
-      setupOrderIdentityUX();
-    }
-  });
-  document.addEventListener('DOMContentLoaded', () => {
-    if (!_wired) {
-      _wired = true;
-      setupOrderIdentityUX();
-    }
-  });
-})();
-
-
-/* ========== INIT ========== */
+// ===================================================================
+// INIT
+// ===================================================================
 window.addEventListener('DOMContentLoaded', ()=>{
-  // Identitas
-  renderIdent();
+  // Mount Identitas UX (prefill + aturan tampil/sembunyi + sync)
+  IdentUX.mount();
 
-  // Auto-suggest wilayah (Dari/Ke)
+  // Auto-suggest wilayah
   suggestSetup(q('#ordFrom'), q('#suggestFrom'));
   suggestSetup(q('#ordTo'),   q('#suggestTo'));
 
@@ -338,7 +428,25 @@ window.addEventListener('DOMContentLoaded', ()=>{
   // Submit/reset
   q('#btnSubmitOrder').addEventListener('click', submitOrder);
   q('#btnResetOrder').addEventListener('click', ()=>{
-    renderIdent();
+    // reset sesuai Settings (source of truth) dan sembunyikan U&J lagi
+    const ident = getIdent() || {};
+    const merge = { ...ident }; // tidak ambil cache agar 'reset' benar-benar mengikuti Settings
+    localStorage.setItem(ORDER_IDENT_CACHE, JSON.stringify({
+      nama: merge.nama||'', unit: merge.unit||'', jabatan: merge.jabatan||''
+    }));
+    // refresh tampilan ident di Order:
+    q('#ordNama').value = merge.nama || '';
+    q('#ordUnit').value = merge.unit || '';
+    q('#ordJabatan').value = merge.jabatan || '';
+    // Sembunyikan kembali U&J agar UX default terjaga
+    // (akses via controller internal)
+    const unitWrap = q('#ordUnit').closest('.col-md-4') || q('#ordUnit').parentElement;
+    const jabWrap  = q('#ordJabatan').closest('.col-md-4') || q('#ordJabatan').parentElement;
+    unitWrap?.classList.add('d-none');
+    jabWrap?.classList.add('d-none');
+    document.getElementById('btnEditIdent')?.classList.remove('d-none');
+
+    // tamu tetap sesuai jumlah saat ini
     renderGuests(+q('#ordJmlTamu').value);
   });
 });
