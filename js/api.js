@@ -40,7 +40,7 @@ __ensureGlobal_isApproved();
 
 
 // <<< SET: URL Web App GAS kamu >>>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbx_P1A3evM6w3DDc_pQK89HOmHK1yEhn2B8kmxe6SPEnAHvMD45LCpYqQ6qm_iF6IlX/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwChpAfIhi_E3LEQweK6GqBfcEEpZNSfm0LJYXrTwL0RbloA04LmUfOlYfY69HI-A/exec';
 
 // Ambil token dari localStorage
 function getToken() {
@@ -212,6 +212,9 @@ export const api = {
   depart:    (orderId, guestNo)                => post('depart', { orderId, guestNo }),
   arrive:    (orderId, guestNo)                => post('arrive', { orderId, guestNo }),
   skipGuest: (orderId, guestNo, note) => post('skipGuest', { orderId, guestNo, note }),
+
+  // Tambah method baru
+  register: (payload)  => post ('register', payload),
 
 
   // journal & dashboard
