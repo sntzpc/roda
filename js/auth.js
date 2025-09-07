@@ -94,52 +94,6 @@ function suggestUsernameFrom(fullname){
   return first.toLowerCase().replace(/[^a-z0-9._]/g,'').slice(0,32);
 }
 
-async function onRegisterSubmit(ev){
-  ev?.preventDefault?.();
-  const btn = q('#btn-reg-submit');
-  const fullname = q('#reg-fullname')?.value?.trim() || '';
-  let username   = q('#reg-username')?.value?.trim() || '';
-  const password = q('#reg-password')?.value || '';
-  const tgId     = (q('#reg-tele')?.value || '').trim();
-
-  // Normalisasi & validasi username
-  if (!username) username = suggestUsernameFrom(fullname);
-  username = username.toLowerCase().replace(/[^a-z0-9._]/g,'');
-  if (!/^[a-z0-9._]{3,32}$/.test(username)) {
-    showNotif('error','Username hanya huruf kecil/angka/titik/underscore (3-32).');
-    return;
-  }
-  if ((password||'').length < 6){
-    showNotif('error','Password minimal 6 karakter.');
-    return;
-  }
-  if (!fullname){
-    showNotif('error','Nama lengkap wajib diisi.');
-    return;
-  }
-
-  try{
-    setBtnLoading(btn, true, 'Mendaftar…');
-    toggleLoginForm(true); // sekalian cegah interaksi lain
-    // Panggil API register (tanpa perlu login)
-    const res = await api.register({ username, password, fullname, tgId });
-    // Auto-login setelah sukses daftar
-    const data = await api.login(username, password, true);
-    auth = { user:data.user, token:data.token };
-    saveToken({token:data.token});
-    renderWho(); gate();
-    showNotif('success','Pendaftaran berhasil. Selamat datang!');
-    showPage(defaultPageFor(auth.user.role));
-  }catch(e){
-    showNotif('error', e.message || 'Pendaftaran gagal');
-  }finally{
-    setBtnLoading(btn, false, 'Daftar');
-    toggleLoginForm(false);
-  }
-}
-
-
-
 /* =========================
    Auto-login (token)
    ========================= */
@@ -177,6 +131,7 @@ async function onLogin(){
 
     showNotif('success','Login berhasil');
     renderWho(); gate();
+    document.body.classList.add('gated');
     showPage(defaultPageFor(auth.user.role));
   }catch(e){
     showNotif('error', e.message || 'Login gagal');
@@ -193,49 +148,49 @@ function logout(){
   auth = { user:null, token:null };
   showNotif('success','Logout');
   renderWho(); gate();
+  document.body.classList.remove('gated');
   showPage('login');
 }
 
 /* =========================
    Init
    ========================= */
-window.addEventListener('DOMContentLoaded', async ()=>{
-  // Pasang guard global dulu
-  setGuard(guardRoute);
+setGuard(guardRoute);
 
-  // 1) Tampilkan halaman login SEGERA agar section lain tetap tersembunyi
+window.addEventListener('DOMContentLoaded', async ()=>{
+  // 1) Tampilkan halaman login segera
   showPage('login');
 
-  // 2) Pasang handler tombol + enter key
-const btnLogin = q('#btnLogin');
-const onEnterLogin  = (ev) => { if (ev.key === 'Enter') onLogin(); };
-btnLogin?.addEventListener('click', onLogin);
-q('#loginUser')?.addEventListener('keydown', onEnterLogin);
-q('#loginPass')?.addEventListener('keydown', onEnterLogin);
+  // 2) Pasang handler login + enter key
+  const btnLogin = q('#btnLogin');
+  const onEnterLogin  = (ev) => { if (ev.key === 'Enter') onLogin(); };
+  btnLogin?.addEventListener('click', onLogin);
+  q('#loginUser')?.addEventListener('keydown', onEnterLogin);
+  q('#loginPass')?.addEventListener('keydown', onEnterLogin);
 
-// 2b) Pasang handler register
-q('#frm-register')?.addEventListener('submit', onRegisterSubmit);
-
-// 2c) Auto-suggest username dari nama lengkap
-q('#reg-fullname')?.addEventListener('input', ()=>{
-  const f = q('#reg-fullname').value;
-  const uEl = q('#reg-username');
-  // Hanya isi jika user belum mengetik manual
-  if (uEl && !uEl.dataset.touched) {
-    uEl.value = suggestUsernameFrom(f);
-  }
-});
-q('#reg-username')?.addEventListener('input', (e)=>{
-  // tandai kalau user sudah mengetik manual
-  e.currentTarget.dataset.touched = '1';
-});
+  // 2c) Auto-suggest username
+  q('#reg-fullname')?.addEventListener('input', ()=>{
+    const f = q('#reg-fullname').value;
+    const uEl = q('#reg-username');
+    if (uEl && !uEl.dataset.touched) {
+      uEl.value = suggestUsernameFrom(f);
+    }
+  });
+  q('#reg-username')?.addEventListener('input', (e)=>{
+    e.currentTarget.dataset.touched = '1';
+  });
 
   // 3) Logout
   q('#btnLogout')?.addEventListener('click', logout);
 
-  // 4) Coba auto-login TANPA mengunci UI
+  // 4) Coba auto-login
   const ok = await tryAuto();
+  if (ok) {
+    document.body.classList.add('gated'); // ⬅ navbar boleh tampil
+  } else {
+    document.body.classList.remove('gated');
+  }
 
-  // 5) Arahkan sesuai hasil auto-login
+  // 5) Arahkan
   showPage(ok ? defaultPageFor(auth.user.role) : 'login');
 });

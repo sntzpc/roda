@@ -104,6 +104,49 @@
       </div>
     </section>
 
+    <!-- REGISTER Page -->
+<section data-page="register" class="d-none">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h5 class="card-title">Pendaftaran Akun</h5>
+          <form id="frm-register" autocomplete="off">
+            <div class="mb-3">
+              <label class="form-label">Nama Lengkap</label>
+              <input id="reg-fullname" class="form-control" placeholder="mis. Budi Santoso" required>
+              <div class="form-text">Username akan direkomendasikan dari nama depan (huruf kecil).</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Username</label>
+              <input id="reg-username" class="form-control" placeholder="mis. budi" required pattern="[a-z0-9._]{3,32}">
+              <div class="form-text">Huruf kecil, tanpa spasi. Contoh: <code>budi</code>, <code>budi.s</code>, <code>budi_s</code>. Min. 3 karakter.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Password</label>
+              <input id="reg-password" type="password" class="form-control" value="user123" required minlength="6">
+              <div class="form-text">Disarankan gunakan <b>user123</b> sebagai password.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Telegram ID <span class="text-muted">(opsional)</span></label>
+              <input id="reg-tele" class="form-control" inputmode="numeric" pattern="[0-9\-]*" placeholder="mis. 123456789">
+              <div class="form-text">Isi jika ingin menerima notifikasi via bot .</div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+              <button type="button" data-route="login" class="btn btn-light">Kembali</button>
+              <button type="submit" id="btn-reg-submit" class="btn btn-primary">
+                Daftar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
     <!-- Dashboard -->
     <section data-page="dashboard" class="d-none">
       <div class="row g-3">
@@ -738,6 +781,7 @@
   <script type="module" src="js/store.js"></script>
   <script type="module" src="js/api.js?v=2025-08-22b"></script>
   <script type="module" src="js/auth.js"></script>
+  <script type="module" src="js/register.js?v=2025-09-07"></script>
   <script type="module" src="js/ui.js?v=2025-08-22b"></script>
   <script type="module" src="js/order.js"></script>
   <script type="module" src="js/vehicles.js"></script>
@@ -749,15 +793,10 @@
   <script type="module" src="js/myorder.js?v=2025-08-22b"></script>
   <script type="module" src="js/dashboard.js"></script>
 
-  <style>
-  /* opsional: sembunyikan dulu semua nav-item, nanti gate() menampilkan yang berhak */
+<style>
   #navMenu .nav-item { display: none; }
   body.gated #navMenu .nav-item { display: list-item; }
 </style>
-<script>
-  // setelah DOM siap dan gate() pertama kali jalan, tambahkan class agar nav muncul
-  window.addEventListener('route', ()=> document.body.classList.add('gated'), { once:true });
-</script>
 
 <!-- Modal: Detail Tamu Driver -->
 <div class="modal fade" id="mdlDriverGuests" tabindex="-1" aria-hidden="true">

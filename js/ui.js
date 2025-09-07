@@ -4,10 +4,10 @@ import { q, qa } from './util.js';
 /* =========================
    Guard hook (dipasang dari auth.js)
    ========================= */
-let guardFn = (page) => page;
+let guardFn = (page) => (page === 'login' || page === 'register') ? page : 'login';
+
 export function setGuard(fn){
-  guardFn = typeof fn === 'function' ? fn : (p)=>p;
-}
+  guardFn = typeof fn === 'function' ? fn : (p)=> (p === 'login' || p === 'register') ? p : 'login';}
 
 /* =========================
    Navigasi halaman
@@ -34,19 +34,19 @@ export function showPage(page){
    Navbar: klik & auto-close hamburger
    ========================= */
 window.addEventListener('DOMContentLoaded', ()=>{
-  qa('#navMenu .nav-link').forEach(a=>{
-    a.addEventListener('click', (ev)=>{
-      ev.preventDefault();
-      const page = a.dataset.route;
-      showPage(page);
+  document.addEventListener('click', (ev)=>{
+    const a = ev.target.closest('[data-route]');
+    if(!a) return;
+    ev.preventDefault();
+    const page = a.dataset.route;
+    showPage(page);
 
-      // Tutup hamburger (collapse) bila terbuka
-      const nav = q('#navMain');
-      if (nav?.classList.contains('show')) {
-        const bs = (window.bootstrap && (bootstrap.Collapse.getInstance(nav) || new bootstrap.Collapse(nav, {toggle:false})));
-        bs?.hide();
-      }
-    });
+    // Tutup hamburger (collapse) bila link berasal dari dalam navbar
+    const nav = q('#navMain');
+    if (nav?.classList.contains('show')) {
+      const bs = (window.bootstrap && (bootstrap.Collapse.getInstance(nav) || new bootstrap.Collapse(nav, {toggle:false})));
+      bs?.hide();
+    }
   });
 });
 

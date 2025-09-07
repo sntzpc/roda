@@ -229,31 +229,34 @@ function doGet(e){
       var action = e.parameter.action || payload.action || '';
 
       // routing sama seperti doPost
-  var map = {
-    // --- Auth ---
-    login, ping,
+var map = {
+  // --- Auth ---
+  login, ping,
 
-    // --- Settings ---
-    listVehicles, upsertVehicle, deleteVehicle,
-    listDrivers, upsertDriver, deleteDriver,
-    listUsers, upsertUser, deleteUser,
-    getConfig, setConfig,
+  // --- Settings ---
+  listVehicles, upsertVehicle, deleteVehicle,
+  listDrivers, upsertDriver, deleteDriver,
+  listUsers, upsertUser, deleteUser,
+  getConfig, setConfig,
 
-    // --- Order & Persetujuan ---
-    createOrder, listApprovals, listAllocGuests,
-    allocGuest, approveGuest, rejectOrder, deleteGuest, approveAll,
-    getOrders: getOrders_,               // ⬅⬅⬅ TAMBAHKAN INI
+  // --- Order & Persetujuan ---
+  createOrder, listApprovals, listAllocGuests,
+  allocGuest, approveGuest, rejectOrder, deleteGuest, approveAll,
+  getOrders: getOrders_,
 
-    // --- Driver (tugas) ---
-    myTasks: myTasks_robust, myTasksAll, depart, arrive, skipGuest, allDriverTasks,
+  // --- Driver (tugas) ---
+  myTasks: myTasks_robust, myTasksAll, depart, arrive, skipGuest, allDriverTasks,
 
-    // --- Laporan & Dashboard ---
-    journal, dashboard,
+  // --- Kasir ---
+  listCashierTasks, createTaskLetter, settleTaskLetter, listCashierJournal,
 
-    // --- Kasir ---
-    listCashierTasks, createTaskLetter, settleTaskLetter, listCashierJournal,
+  // --- Publik Register ---
+  register,
 
-    debugState, testTelegram
+  // --- Laporan & Dashboard ---
+  journal, dashboard,
+
+  debugState, testTelegram
 };
       var fn = map[action];
       if (!fn) {
@@ -314,6 +317,9 @@ function doPost(e){
 
   // --- Kasir ---
   listCashierTasks, createTaskLetter, settleTaskLetter, listCashierJournal,
+
+  // --- Publik Register (⬅⬅ TAMBAH INI)
+  register,
 
   // --- Laporan & Dashboard ---
   journal, dashboard,
@@ -388,6 +394,53 @@ function actor_(req){
 function log_(req, action, detail){
   SH(SHEETS.LOG).appendRow([ new Date(), actor_(req), action||'', JSON.stringify(detail||{}) ]);
 }
+
+/**
+ * Public: Register user role "user" (tanpa login).
+ * Payload: { username, password, fullname, tgId? }
+ * - Validasi pola username
+ * - Cek duplikasi
+ * - Set role = 'user'
+ * - Gunakan jalur yang sama dengan upsertUser agar login tetap konsisten
+ */
+function register(payload){
+  var username = String(payload && payload.username || '').trim().toLowerCase();
+  var password = String(payload && payload.password || '');
+  var fullname = String(payload && payload.fullname || '').trim();
+  var tgId     = (payload && payload.tgId) ? String(payload.tgId).trim() : '';
+
+  if (!username || !/^[a-z0-9._]{3,32}$/.test(username)){
+    throw new Error('Username tidak valid (huruf kecil/angka/titik/underscore, 3–32).');
+  }
+  if (!fullname){
+    throw new Error('Nama lengkap wajib diisi.');
+  }
+  if (!password || password.length < 6){
+    throw new Error('Password minimal 6 karakter.');
+  }
+
+  // Cek apakah user sudah ada
+  var users = listUsers(); // gunakan fungsi yang sudah ada
+  var exists = users.some(function(u){ return (u.username||'').toLowerCase() === username; });
+  if (exists){
+    throw new Error('Username sudah terdaftar.');
+  }
+
+  // Buat user baru via jalur upsertUser supaya format field & hashing konsisten
+  // upsertUser biasanya menerima { username, role?, newPassword?, tgId?, fullname? }
+  var newUser = {
+    username: username,
+    role: 'user',
+    newPassword: password,
+    tgId: tgId,
+    fullname: fullname
+  };
+  upsertUser(newUser);
+
+  // Opsional: kirim kembali subset info user
+  return { username: username, role: 'user', fullname: fullname, tgId: tgId || null, created_at: new Date().toISOString() };
+}
+
 
 /****************************************
  * ========== FIRST RUN / SCHEMA ========

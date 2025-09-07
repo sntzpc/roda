@@ -40,7 +40,7 @@ __ensureGlobal_isApproved();
 
 
 // <<< SET: URL Web App GAS kamu >>>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwChpAfIhi_E3LEQweK6GqBfcEEpZNSfm0LJYXrTwL0RbloA04LmUfOlYfY69HI-A/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxuiiDCDMzoOdGmEV_o0Z9MDegDjDSKrLLgA0boVVsg1MyLjrPxIjZqX2hhNMdjdc6J/exec';
 
 // Ambil token dari localStorage
 function getToken() {
