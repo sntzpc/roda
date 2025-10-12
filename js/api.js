@@ -132,7 +132,8 @@ async function post(action, payload = {}) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // hindari preflight
       body: JSON.stringify(body),
       mode: 'cors',
-      credentials: 'omit'
+      credentials: 'omit',
+      cache: 'no-store'
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'GAS error');

@@ -1,9 +1,3 @@
-window.isApproved_ = window.isApproved_ || function(v){
-  if (v === true || v === 1) return true;
-  const t = String(v ?? '').toUpperCase();
-  return (t === 'TRUE' || t === '1' || t === 'YA');
-};
-
 // /js/myorder.js
 // =====================================================
 // Halaman "My Order" – akses: User, Admin, Master
